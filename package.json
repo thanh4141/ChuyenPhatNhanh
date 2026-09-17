@@ -1,0 +1,20 @@
+{
+  "name": "chuyen-phat-nhanh",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm --prefix Backend start",
+    "dev": "npm --prefix Backend run dev",
+    "setup": "npm --prefix Backend install && npm --prefix Mobile install",
+    "db:migrate": "npm --prefix Backend run db:migrate",
+    "db:seed": "npm --prefix Backend run db:seed",
+    "test": "npm --prefix Backend test",
+    "test:integration": "npm --prefix Backend run test:integration",
+    "typecheck": "npm --prefix Mobile run typecheck",
+    "test:ui": "npm --prefix Backend run test:ui",
+    "db:local:stop": "node Backend/src/scripts/local-stop.js",
+    "mobile": "npm --prefix Mobile start",
+    "preview:mobile": "node Backend/src/scripts/mobile-preview.js"
+  },
+  "engines": { "node": ">=22.13" }
+}

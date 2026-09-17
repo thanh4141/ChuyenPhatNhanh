@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Chuyển Phát Nhanh",
+    "slug": "chuyen-phat-nhanh",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "vn.chuyenphat.mobile" },
+    "android": { "package": "vn.chuyenphat.mobile" },
+    "plugins": ["expo-secure-store"],
+    "web": { "bundler": "metro" }
+  }
+}
