@@ -5,9 +5,26 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "vn.chuyenphat.mobile" },
-    "android": { "package": "vn.chuyenphat.mobile" },
-    "plugins": ["expo-secure-store"],
-    "web": { "bundler": "metro" }
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "vn.chuyenphat.mobile"
+    },
+    "android": {
+      "package": "vn.chuyenphat.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép CPN chọn ảnh hàng hóa và sự cố.",
+          "cameraPermission": "Cho phép CPN chụp ảnh hàng hóa và sự cố.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "web": {
+      "bundler": "metro"
+    }
   }
 }

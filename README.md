@@ -1,181 +1,131 @@
 # Chuyển Phát Nhanh · CPN
 
-Ứng dụng chuyển phát nhanh gồm **API Node.js/Express + MySQL**, **web Admin HTML/CSS/JavaScript** và **app React Native/Expo viết bằng TypeScript `.tsx`** cho khách hàng và nhân viên.
+Hệ thống **MySQL 8 + API Node.js/Express**, web quản lí **HTML/CSS/JS**, app nhân viên và khách hàng **React Native/Expo (.tsx)**. Không có chức năng tính lương.
 
 ## Cấu trúc
 
 ```text
-ChuyenPhatNhanh/
-├── Backend/
-│   ├── src/
-│   │   ├── common/          # JWT, phân quyền, kiểm tra dữ liệu, xử lý lỗi
-│   │   ├── config/          # Biến môi trường, connection pool MySQL
-│   │   ├── modules/
-│   │   │   ├── auth/        # Đăng nhập, đăng ký, hồ sơ, đổi mật khẩu
-│   │   │   ├── dashboard/   # Tổng quan vận hành
-│   │   │   ├── orders/      # Đơn hàng, phân công, trạng thái
-│   │   │   ├── services/    # Dịch vụ và cước phí
-│   │   │   └── users/       # Nhân viên, khách hàng
-│   │   ├── routes/
-│   │   ├── scripts/         # schema.sql, migrate, seed
-│   │   ├── app.js
-│   │   └── server.js
-│   ├── test/
-│   ├── .env.example
-│   ├── Constructor.md
-│   ├── package.json
-│   └── package-lock.json
-├── Admin/
-│   ├── assets/
-│   ├── css/
-│   ├── js/
-│   └── index.html
-├── Mobile/
-│   ├── assets/
-│   ├── scripts/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── config/
-│   │   ├── context/
-│   │   ├── screens/         # Các màn hình .tsx
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── App.tsx
-│   ├── App.tsx
-│   ├── index.ts
-│   ├── app.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── package.json
-│   └── package-lock.json
-├── docs/                    # API, mô hình dữ liệu
-├── scripts/                 # MySQL riêng cho môi trường Windows
-├── package.json
-└── README.md
+Backend/src/
+  common/       JWT, phân quyền, validation, xử lý lỗi
+  config/       MySQL, môi trường, danh mục tỉnh
+  modules/      auth, users, employees, addresses, services,
+                orders, media, notifications, maps, dashboard
+  routes/       Ghép các API
+  scripts/      schema.sql, workflow.sql, migrations/, migrate, seed, backup
+  server.js
+Admin/          index.html, css/, js/, maps/ (Leaflet)
+Mobile/src/     screens/*.tsx, components/, context/, services/, types/
+docs/           DATABASE.md, API.md, MAPS.md
+scripts/        Khởi động MySQL local trên Windows
 ```
 
-## Chức năng theo vai trò
+## Chức năng
 
-| Chức năng | Admin — web | Nhân viên — app | Khách hàng — app |
-|---|---|---|---|
-| Đăng nhập, sửa hồ sơ, đổi mật khẩu | Có | Có | Có |
-| Đăng ký tài khoản | Tạo bằng seed | Admin tạo tài khoản | Tự đăng ký |
-| Danh sách và chi tiết đơn | Tất cả | Đơn được phân công | Đơn của mình |
-| Tạo đơn, tính cước, COD | Tạo cho khách hàng | — | Có |
-| Phân công / đổi nhân viên | Có | — | — |
-| Cập nhật lấy, vận chuyển, giao hàng | Có | Đơn được phân công | — |
-| Hủy đơn | Theo quy trình trạng thái | — | Khi chờ xác nhận |
-| Tra cứu theo mã vận đơn | Có | Có | Có |
-| Quản lí nhân viên và khách hàng | Tạo, sửa, khóa/mở | — | — |
-| Bảng cước | Xem, chỉnh sửa, bật/tắt | — | Xem khi tạo đơn |
-| Tổng quan, doanh thu cước, CSV | Có | — | — |
+| Vai trò | Chức năng |
+|---|---|
+| Admin | Tổng quan; bảng cước 3 tuyến × 2 dịch vụ; 2 cửa sổ tài khoản khách/nhân viên; khóa/mở khách; thêm/sửa nhân viên; tìm/thêm/sửa hồ sơ nhân viên; **chỉ xem đơn hàng** |
+| Nhân viên | Xem đơn chờ, tự nhận đơn; cập nhật từng bước; báo sự cố bằng lý do và ảnh ≤15 MB; hồ sơ, đổi mật khẩu, thống kê hoàn thành/thất bại, sao và bình luận |
+| Khách hàng | Chụp/chọn ảnh, mô tả/cân nặng; sổ địa chỉ và ghim bản đồ; báo cước đường bộ; COD/bảo hiểm/đóng gói; tạo đơn, lịch sử, hủy trước lấy hàng; thông báo và đánh giá; hồ sơ/mật khẩu |
 
-**Không có chức năng tính lương nhân viên.** Doanh thu cước được tính từ đơn giao thành công; COD là khoản thu hộ được lưu riêng, chưa phải nghiệp vụ đối soát hay xác nhận chuyển tiền.
+```text
+Chờ nhận → Đã nhận → Chờ lấy hàng → Đã lấy hàng → Đang giao
+                                                    ├─ Hoàn thành → Đánh giá
+                                                    └─ Chưa hoàn thành → Lý do + ảnh
+```
 
-## Chạy nhanh trên máy Windows này
+Khách được hủy ở Chờ nhận, Đã nhận, Chờ lấy hàng. Các trạng thái kết thúc không mở lại. Nhận/cập nhật đơn dùng transaction và khóa dòng MySQL. Một đơn hoàn thành chỉ có một đánh giá từ chủ đơn. Thông báo được lưu trong MySQL và làm mới mỗi 15 giây khi mở màn hình Thông báo; chưa phải push notification khi đóng app.
 
-Đã có MySQL 8 và Node.js trên máy. Dự án có thể dùng MySQL riêng tại `127.0.0.1:3307`; dữ liệu đặt trong `.local/mysql-data`, không thay đổi dịch vụ MySQL đang có ở cổng 3306. Mật khẩu MySQL riêng và khóa JWT được tạo ngẫu nhiên, lưu trong các file đã bị `.gitignore` loại trừ.
+## Chạy trên máy
 
-Tại thư mục gốc, mở PowerShell:
+Cần Node.js ≥22.13 và MySQL 8.0+. Chạy trong thư mục dự án:
 
 ```powershell
-# Chỉ cần cài khi mới tải dự án hoặc chưa có node_modules
 npm.cmd run setup
+# Chỉ tạo .env nếu chưa có:
+Copy-Item Backend/.env.example Backend/.env
+```
 
-# Khởi động / khởi tạo MySQL riêng. Script không ghi đè Backend/.env đã có.
-powershell -ExecutionPolicy Bypass -File scripts/start-local-mysql.ps1
+Điền thông tin MySQL và JWT trong `Backend/.env`. Tạo chuỗi JWT ngẫu nhiên bằng `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Đặt `SEED_ADMIN_PASSWORD`; nếu muốn tài khoản/đơn mẫu, bật `SEED_DEMO=true` và đặt `SEED_DEMO_PASSWORD`.
 
-# Tạo bảng và dữ liệu mẫu (có thể chạy lại)
+```powershell
 npm.cmd run db:migrate
 npm.cmd run db:seed
-
-# Chạy cả API và web Admin
 npm.cmd start
 ```
 
-Mở **http://localhost:3000** để sử dụng Admin. API kiểm tra kết nối: **http://localhost:3000/api/health**.
+Admin: **http://localhost:3000**. Health: **http://localhost:3000/api/health**.
 
-Tài khoản minh họa khi dùng script MySQL riêng và seed:
-
-| Vai trò | Email | Mật khẩu minh họa |
-|---|---|---|
-| Admin | `admin@chuyenphat.vn` | `Admin@12345` |
-| Nhân viên | `nhanvien@chuyenphat.vn` | `Demo@12345` |
-| Khách hàng | `khachhang@chuyenphat.vn` | `Demo@12345` |
-
-Seed tạo 12 đơn với nhiều trạng thái để xem ngay giao diện. Ví dụ mã tra cứu: `CPNDEMO000001`. Seed giữ nguyên tài khoản và đơn đã tồn tại; thay đổi mật khẩu trong `.env` không đổi mật khẩu tài khoản cũ. Dùng chức năng **Đổi mật khẩu** để thay mật khẩu đã tạo.
-
-Dừng API bằng `Ctrl+C`. Dừng MySQL riêng bằng `npm.cmd run db:local:stop`; dữ liệu vẫn được giữ để sử dụng lần sau.
-
-## Dùng MySQL có sẵn hoặc trên máy khác
-
-Yêu cầu Node.js từ 22.13, MySQL 8.0 trở lên. React Native/Expo được ghép phiên bản theo [bảng tương thích Expo SDK](https://docs.expo.dev/versions/latest/).
-
-1. Chạy `npm.cmd run setup` tại thư mục gốc.
-2. Sao chép `Backend/.env.example` thành `Backend/.env` (nếu chưa có).
-3. Điền `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` theo MySQL của bạn.
-4. Tạo `JWT_SECRET` bằng lệnh dưới và điền vào `.env`:
-
-   ```powershell
-   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-   ```
-
-5. Điền `SEED_ADMIN_PASSWORD`. Muốn dữ liệu mẫu, đặt `SEED_DEMO=true` và điền `SEED_DEMO_PASSWORD`.
-6. Chạy `npm.cmd run db:migrate`, `npm.cmd run db:seed`, rồi `npm.cmd start`.
-
-Tài khoản chạy migrate cần quyền tạo CSDL và bảng; tài khoản chạy API chỉ cần quyền thao tác dữ liệu trên CSDL của ứng dụng. File SQL nằm tại `Backend/src/scripts/schema.sql`; có thể tạo CSDL, chọn schema trong MySQL Workbench rồi chạy file SQL, sau đó vẫn chạy migrate để nạp hai dịch vụ ban đầu.
-
-## Chạy app `.tsx`
-
-Mở terminal thứ hai, giữ API đang chạy:
+Trên máy Windows hiện tại đã có MySQL riêng tại **127.0.0.1:3307**, CSDL **chuyen_phat_nhanh**, dữ liệu `.local/mysql-data`. Khởi động lại nếu cần:
 
 ```powershell
-# Chỉ sao chép khi chưa có Mobile/.env
-Copy-Item Mobile/.env.example Mobile/.env
-npm.cmd run mobile
+powershell -ExecutionPolicy Bypass -File scripts/start-local-mysql.ps1
+# Dừng riêng MySQL của dự án:
+npm.cmd run db:local:stop
 ```
 
-Điền `EXPO_PUBLIC_API_URL` trong `Mobile/.env` theo thiết bị:
+Xem CSDL bằng MySQL Workbench: tạo connection host `127.0.0.1`, port `3307`, user/password trong `Backend/.env`, rồi chọn schema `chuyen_phat_nhanh`. Nếu dùng MySQL khác thì lấy host/port theo `.env`.
 
-| Thiết bị chạy app | Giá trị API |
-|---|---|
-| Trình duyệt trên máy đang chạy API | `http://localhost:3000/api` |
-| Android Emulator | `http://10.0.2.2:3000/api` |
-| Điện thoại thật cùng mạng Wi-Fi | `http://<IPv4-của-máy-tính>:3000/api` |
-
-Lấy IPv4 bằng `ipconfig`. Ví dụ máy tính có IP `192.168.1.20` thì nhập `http://192.168.1.20:3000/api`. Khởi động lại Expo sau khi sửa `.env`. Trên điện thoại thật, `localhost` là điện thoại, vì vậy cần dùng IP máy tính. Cho phép Node.js qua Windows Firewall trên mạng riêng nếu thiết bị không truy cập API.
-
-- Quét QR bằng Expo Go tương thích SDK 57 để mở trên thiết bị Android/iOS; xem [hướng dẫn Expo](https://docs.expo.dev/get-started/start-developing/).
-- Nhấn `w` trong terminal Expo hoặc chạy `npm.cmd --prefix Mobile run web` để mở bản web kiểm tra của app.
-- Với bundle đã xuất bằng `npm.cmd --prefix Mobile run export:web`, có thể chạy `npm.cmd run preview:mobile` để xem app tại **http://localhost:8081**. API vẫn cần chạy ở cổng 3000.
-- App Android/iOS dùng SecureStore cho token đăng nhập; bản web giữ token trong bộ nhớ và yêu cầu đăng nhập lại khi tải lại trang.
-
-## Quy trình một đơn hàng
-
-```text
-Khách tạo đơn → Chờ xác nhận
-Admin phân công → Chờ lấy hàng
-Nhân viên → Đã lấy hàng → Đang vận chuyển → Đang giao hàng
-                                                  ├─ Giao thành công
-                                                  └─ Giao thất bại → Đang giao hàng (giao lại)
+```sql
+USE chuyen_phat_nhanh;
+SHOW TABLES;
+SELECT id, tracking_code, status, total_amount FROM orders;
+SELECT * FROM service_rates;
 ```
 
-Khách được hủy đơn của mình khi **Chờ xác nhận**. Admin có thể hủy khi **Chờ xác nhận**, **Chờ lấy hàng** hoặc **Giao thất bại**. Hủy/giao thất bại bắt buộc nhập lý do. Đơn đã giao thành công hoặc đã hủy không được mở lại. Nhân viên đang giữ đơn chưa kết thúc phải được phân công lại/hoàn thành đơn trước khi khóa tài khoản.
-
-Quyền truy cập được kiểm tra ở API. Cước do máy chủ tính, không nhận giá do client tự gửi. Thay đổi bảng cước chỉ ảnh hưởng đơn mới. Các thao tác phân công và đổi trạng thái dùng transaction + khóa dòng để tránh ghi trùng khi cập nhật đồng thời. Lịch sử lưu UTC; thống kê theo ngày Việt Nam.
-
-## Kiểm thử
+## Chạy app
 
 ```powershell
-npm.cmd test                       # 5 kiểm thử nghiệp vụ
-npm.cmd run test:integration       # 12 kiểm thử API với MySQL thật
-npm.cmd run typecheck              # Kiểm tra TypeScript app
+npm.cmd --prefix Mobile start
+```
+
+`Mobile/.env` có `EXPO_PUBLIC_API_URL`: trình duyệt cùng máy dùng `http://localhost:3000/api`, Android Emulator dùng `http://10.0.2.2:3000/api`, điện thoại thật dùng IPv4 máy tính cùng Wi-Fi. Sau khi đổi phải khởi động lại Expo. Cho phép cổng API trong tường lửa khi thử điện thoại.
+
+Xuất app web để thử:
+
+```powershell
 npm.cmd --prefix Mobile run export:web
-npm.cmd run test:ui                # Chrome headless: Admin + app Expo web
+npm.cmd run preview:mobile
 ```
 
-Kiểm thử tích hợp và giao diện tạo CSDL tạm có tên `cpn_test_*` / `cpn_ui_*`, chỉ xóa đúng CSDL vừa tạo khi kết thúc. Tài khoản MySQL dùng để kiểm thử cần quyền tạo/xóa schema tạm. `test:ui` cần Chrome, bản export web của app, và cổng 3000/8081 đang trống; dừng server phát triển trước khi chạy. Có thể đặt `PLAYWRIGHT_CHANNEL=msedge` nếu dùng Edge. Ảnh kiểm tra lưu trong `.local/review`.
+Mở **http://localhost:8081**. Mobile native lưu token bằng SecureStore; bản web giữ trong bộ nhớ nên tải lại trang sẽ phải đăng nhập lại.
 
-Đã kiểm tra luồng Admin tạo/phân công đơn, khách tạo/hủy đơn, nhân viên giao hàng và tra cứu trên trình duyệt. Kiểm tra Android bundle không thay thế kiểm thử trực tiếp trên thiết bị hoặc build APK/IPA.
+Tài khoản mẫu trên máy phát triển này:
 
-Tài liệu chi tiết: [API](docs/API.md), [mô hình dữ liệu](docs/DATABASE.md), [cấu trúc Backend](Backend/Constructor.md), [app Mobile](Mobile/README.md).
+| Vai trò | Email | Mật khẩu mẫu |
+|---|---|---|
+| Admin | admin@chuyenphat.vn | Admin@12345 |
+| Nhân viên | nhanvien@chuyenphat.vn | Demo@12345 |
+| Khách hàng | khachhang@chuyenphat.vn | Demo@12345 |
+
+Seed không đổi mật khẩu tài khoản đã tồn tại. Thông tin mẫu chỉ dành cho thử nghiệm; đặt mật khẩu riêng khi triển khai.
+
+## Bản đồ miễn phí
+
+Mặc định **OpenStreetMap + Leaflet + OSRM**, không cần API key, không dùng Google Maps. Quãng đường lấy từ tuyến đường bộ ô tô OSRM, **chỉ điểm lấy → điểm giao**. Lưu đường đi đầy đủ để hiển thị trong báo giá và chi tiết đơn.
+
+Xác minh tỉnh thực hiện tại backend bằng bộ ranh giới 34 tỉnh đi kèm. Tìm tên tỉnh không cần dịch vụ geocoding; tìm tên đường/địa danh dùng Photon. Nếu Photon gián đoạn, vẫn đặt ghim trực tiếp, nhập địa chỉ và báo cước được.
+
+Các máy chủ cộng đồng giới hạn lưu lượng, không cam kết hoạt động liên tục hoặc dữ liệu mới tức thời. Dữ liệu đường đi cập nhật theo máy chủ OSRM; không bao gồm giao thông thời gian thực. Xem [cấu hình, giới hạn và cách tự chạy](docs/MAPS.md).
+
+## Cước minh họa và dữ liệu cũ
+
+Tiêu chuẩn 15.000đ, hỏa tốc 30.000đ; bao gồm 5 km/1 kg đầu. Mỗi km vượt 3.000đ, mỗi 0,5 kg vượt 2.500đ; bảo hiểm 9.900đ, đóng gói 5.000đ khi chọn. Các mức cơ bản/vượt/ETA được sửa riêng cho từng tuyến trên Admin. Tiền hàng COD tách khỏi tổng cước.
+
+Dữ liệu MySQL cũ được giữ lại. Đơn cũ giữ số tiền; trạng thái chuyển tương ứng và hiển thị chưa có quãng đường nếu trước đây không lưu. File SQLite của bạn dùng làm mẫu thiết kế, không phải CSDL chạy app. [Thiết kế và nâng cấp MySQL](docs/DATABASE.md).
+
+## Kiểm tra
+
+```powershell
+npm.cmd test
+npm.cmd run test:integration
+npm.cmd run typecheck
+npm.cmd --prefix Mobile run export:web
+npm.cmd run test:ui
+npx.cmd --prefix Mobile expo export --platform android --output-dir Mobile/dist-android
+```
+
+Kiểm thử API/UI tạo MySQL schema `cpn_test_*` / `cpn_ui_*` riêng và chỉ xóa schema của lần chạy. Test UI cần Chrome, cổng 3000/8081 trống và bản export web mới. Các tuyến trong kiểm thử tự động dùng fixture xác định; kiểm tra máy chủ OSRM thực hiện riêng, không thay dữ liệu sản xuất bằng quãng đường giả.
+
+Ảnh thử giao diện ở `.local/review`. Android export là bundle, không phải APK và không thay thế kiểm thử camera/WebView trên thiết bị thật.
+
+Tài liệu: [API](docs/API.md), [CSDL](docs/DATABASE.md), [Bản đồ](docs/MAPS.md), [Mobile](Mobile/README.md).

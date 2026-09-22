@@ -1,141 +1,121 @@
-# API · Chuyển Phát Nhanh
+# API CPN
 
-Base URL: `http://localhost:3000/api`. Request và response dùng JSON. Sau khi đăng nhập, gửi `Authorization: Bearer <token>`. JWT hết hạn sau 12 giờ. Đăng xuất, đổi mật khẩu hoặc khóa tài khoản sẽ vô hiệu hóa phiên đăng nhập cũ.
+Base `http://localhost:3000/api`. JSON, trừ upload dùng multipart. Đăng nhập xong gửi `Authorization: Bearer <token>`. Khóa tài khoản, đổi mật khẩu, đăng xuất thu hồi JWT cũ.
 
-## Danh sách endpoint
+## Endpoint
 
-| Method | Đường dẫn | Quyền | Ý nghĩa |
-|---|---|---|---|
-| GET | `/health` | Công khai | Kiểm tra API và MySQL |
-| POST | `/auth/register` | Công khai | Đăng ký khách hàng |
-| POST | `/auth/login` | Công khai | Đăng nhập |
-| GET | `/auth/me` | Đã đăng nhập | Hồ sơ hiện tại |
-| PATCH | `/auth/me` | Đã đăng nhập | Sửa tên, điện thoại, địa chỉ |
-| POST | `/auth/change-password` | Đã đăng nhập | Đổi mật khẩu |
-| POST | `/auth/logout` | Đã đăng nhập | Đăng xuất các thiết bị |
-| GET | `/users` | Admin | Tìm, phân trang nhân viên/khách hàng |
-| POST | `/users` | Admin | Tạo nhân viên/khách hàng |
-| PATCH | `/users/:id` | Admin | Sửa hồ sơ, khóa/mở tài khoản |
-| GET | `/services` | Đã đăng nhập | Danh sách dịch vụ; Admin thấy cả dịch vụ tắt |
-| POST | `/services/quote` | Đã đăng nhập | Báo cước từ cấu hình trên server |
-| PATCH | `/services/:id` | Admin | Sửa giá, thông tin, trạng thái dịch vụ |
-| GET | `/orders` | Theo vai trò | Danh sách đơn trong phạm vi được phép |
-| POST | `/orders` | Admin, khách hàng | Tạo đơn |
-| GET | `/orders/:id` | Theo vai trò | Chi tiết + lịch sử |
-| PATCH | `/orders/:id/assign` | Admin | Phân công hoặc đổi nhân viên |
-| PATCH | `/orders/:id/status` | Theo vai trò | Chuyển trạng thái hợp lệ |
-| GET | `/tracking/:code` | Công khai | Chỉ trả mã, trạng thái, mốc thời gian |
-| GET | `/dashboard` | Admin | Thống kê, biểu đồ, đơn mới nhất |
-
-Tra cứu công khai không trả tên, số điện thoại, địa chỉ, COD hay ghi chú nội bộ. Khách hàng chỉ đọc đơn có `customer_id` của mình; nhân viên chỉ đọc đơn có `employee_id` của mình. Đơn ngoài phạm vi trả 404.
-
-## Ví dụ
-
-Đăng nhập — `POST /auth/login`:
-
-```json
-{ "email": "khachhang@chuyenphat.vn", "password": "Demo@12345" }
-```
-
-Response: `{ "token": "...", "user": { "id": 2, "name": "...", "role": "customer", "email": "...", "phone": "...", "address": "..." } }`.
-
-Đăng ký — `POST /auth/register`:
-
-```json
-{
-  "name": "Nguyễn Minh Anh",
-  "email": "minhanh@example.com",
-  "password": "MatKhau123!",
-  "phone": "0901234567",
-  "address": "25 Nguyễn Thị Minh Khai, TP. Hồ Chí Minh"
-}
-```
-
-API đăng ký không nhận `role`; tài khoản luôn là khách hàng. Admin tạo nhân viên qua `POST /users` với các trường trên và `"role": "employee"`.
-
-Tạo đơn — `POST /orders`:
-
-```json
-{
-  "sender_name": "Nguyễn Minh Anh",
-  "sender_phone": "0901234567",
-  "sender_address": "25 Nguyễn Thị Minh Khai, TP. Hồ Chí Minh",
-  "receiver_name": "Trần Bảo Ngọc",
-  "receiver_phone": "0912345678",
-  "receiver_address": "36 Hai Bà Trưng, Hà Nội",
-  "package_name": "Tài liệu văn phòng",
-  "weight": 1.5,
-  "zone": "domestic",
-  "service_id": 1,
-  "cod_amount": 200000,
-  "payer": "sender",
-  "note": "Gọi trước khi giao"
-}
-```
-
-Admin cần thêm `customer_id`; khách hàng luôn được gắn với ID từ JWT, không thể tạo đơn cho người khác. Response 201: `{ "order": { ... } }`. `shipping_fee` và `tracking_code` do server tạo; client không được ghi đè.
-
-Tính cước — `POST /services/quote`:
-
-```json
-{ "service_id": 1, "weight": 1.5, "zone": "domestic" }
-```
-
-Response theo bảng giá ban đầu: `{ "shipping_fee": 45000, "estimated_days": "2–4 ngày" }`.
-
-Phân công — `PATCH /orders/1/assign`:
-
-```json
-{ "employee_id": 3 }
-```
-
-Đổi trạng thái — `PATCH /orders/1/status`:
-
-```json
-{ "status": "failed", "note": "Không liên hệ được người nhận" }
-```
-
-Đổi mật khẩu — `POST /auth/change-password`:
-
-```json
-{ "current_password": "MatKhauCu123!", "new_password": "MatKhauMoi456!" }
-```
-
-## Tìm kiếm và phân trang
-
-- `GET /orders?page=1&limit=20&q=CPN&status=pending`.
-- `GET /users?page=1&limit=20&role=employee&active=1&q=Nam`.
-- `limit`: 1–100; `page` bắt đầu từ 1; response `{ items, total, page, limit }`.
-- Tìm đơn theo mã, tên hoặc điện thoại người nhận. Tìm người dùng theo tên, email, điện thoại.
-
-## Trạng thái và quy tắc
-
-| Giá trị | Hiển thị | Chuyển sang |
+| Method | Đường dẫn | Quyền / chức năng |
 |---|---|---|
-| `pending` | Chờ xác nhận | `assigned` qua phân công; `cancelled` |
-| `assigned` | Chờ lấy hàng | `picked_up`; Admin được `cancelled` |
-| `picked_up` | Đã lấy hàng | `in_transit` |
-| `in_transit` | Đang vận chuyển | `out_for_delivery` |
-| `out_for_delivery` | Đang giao hàng | `delivered`, `failed` |
-| `failed` | Giao thất bại | `out_for_delivery`; Admin được `cancelled` |
-| `delivered` | Giao thành công | Kết thúc |
-| `cancelled` | Đã hủy | Kết thúc |
+| GET | /health | Công khai, kiểm tra MySQL |
+| POST | /auth/register | Đăng ký khách; không nhận role |
+| POST | /auth/login | Đăng nhập |
+| GET/PATCH | /auth/me | Hồ sơ của mình |
+| POST | /auth/change-password | current_password, new_password |
+| POST | /auth/logout | Thu hồi phiên |
+| GET | /users | Admin: role, q, active, page, limit |
+| POST | /users | Admin: tạo employee |
+| PATCH | /users/:id | Admin: sửa nhân viên; khách chỉ active |
+| GET/POST | /employees | Admin: tìm/thêm hồ sơ |
+| PATCH | /employees/:id | Admin: sửa hồ sơ, không đổi user_id |
+| GET | /employees/me | Nhân viên: profile, stats, reviews phân trang |
+| GET/POST | /addresses | Khách: xem/tạo địa chỉ |
+| PATCH/DELETE | /addresses/:id | Khách: địa chỉ của mình |
+| GET | /services | 6 bảng cước; người thường chỉ thấy gói bật |
+| PATCH | /services/:id | Admin: sửa bảng cước theo rate_id |
+| POST | /services/quote | Khách: báo giá đường bộ |
+| POST | /media/parcel | Khách: một ảnh, trường image |
+| POST | /media/incident | Nhân viên: một ảnh sự cố, trường image |
+| GET | /media/:id/content | Có JWT và quyền xem ảnh |
+| GET | /orders | Phạm vi theo vai trò; scope=mine/waiting |
+| POST | /orders | Chỉ khách: tạo từ báo giá |
+| GET | /orders/:id | order, events, media, review |
+| POST | /orders/:id/accept | Nhân viên tự nhận đơn chờ |
+| PATCH | /orders/:id/status | Khách hủy; nhân viên cập nhật đơn đã nhận |
+| POST | /orders/:id/review | Chủ đơn đã hoàn thành đánh giá một lần |
+| GET | /notifications | Của mình: items, total, unread_count, page, limit |
+| PATCH | /notifications/read-all | Đánh dấu của mình đã đọc |
+| PATCH | /notifications/:id/read | Đánh dấu một thông báo của mình |
+| GET | /dashboard | Admin |
+| GET | /tracking/:code | Chỉ mã/trạng thái/thời gian, không lộ liên hệ |
+| GET | /maps/config | Provider, tile_url, provinces; không có API key |
+| GET | /maps/search?q=... | Tên tỉnh nội bộ / địa danh Photon |
+| GET | /maps/reverse?latitude=...&longitude=... | Tỉnh tại tọa độ, dùng ranh giới nội bộ |
 
-Nhân viên không được hủy đơn. Khách hàng chỉ được hủy `pending`. `failed` và `cancelled` cần lý do ít nhất 3 ký tự. Phân công lại giữ trạng thái hiện tại, ngoại trừ lần phân công đầu chuyển `pending` sang `assigned`.
+Admin không có API tạo, phân công hay đổi trạng thái đơn. Nhân viên xem tất cả đơn `pending` chưa có người nhận ở `scope=waiting`, và chỉ đơn đã nhận của mình ở `scope=mine`. Khách chỉ thấy đơn của mình. Ngoài phạm vi trả 404.
 
-## Lỗi và giới hạn
+## Địa chỉ
 
-Response lỗi: `{ "message": "...", "errors": [{ "field": "...", "message": "..." }] }` (errors chỉ có khi validation thất bại).
+POST /addresses, PATCH /addresses/:id:
 
-| HTTP | Ý nghĩa |
-|---|---|
-| 400 | Dữ liệu sai hoặc thiếu lý do |
-| 401 | Chưa đăng nhập, phiên hết hạn, tài khoản bị khóa |
-| 403 | Không đủ quyền |
-| 404 | Không tìm thấy hoặc ngoài phạm vi truy cập |
-| 409 | Email trùng, trạng thái xung đột, nhân viên còn đơn chưa xong |
-| 413 | Request quá 100 KB |
-| 429 | Vượt giới hạn yêu cầu |
-| 500 | Lỗi máy chủ; response không lộ chi tiết SQL |
+```json
+{
+ "label": "Nhà riêng",
+ "contact_name": "Nguyễn Minh Anh",
+ "phone": "0901234567",
+ "province_code": "79",
+ "ward": "Phường Sài Gòn",
+ "village": "",
+ "detail": "25 Lê Lợi",
+ "latitude": 10.7769,
+ "longitude": 106.7009,
+ "is_default": true
+}
+```
 
-Giới hạn đăng nhập/đăng ký: 30 yêu cầu / 15 phút / IP. Tra cứu: 30 / phút / IP. Tổng API: 300 / phút / IP. Mật khẩu từ 8 ký tự, tối đa 72 byte UTF-8. Khối lượng 0,01–1.000 kg, tối đa 2 chữ số thập phân; COD từ 0 đến 100.000.000 đ.
+Backend kiểm tra mã tỉnh với tọa độ. Với delivery trong báo giá, dùng các trường này **trừ label và is_default**.
+
+## Báo giá rồi tạo đơn
+
+POST /services/quote:
+
+```json
+{
+ "pickup_address_id": 1,
+ "delivery": {
+  "contact_name":"Người nhận", "phone":"0902222222",
+  "province_code":"79", "ward":"Phường Thạnh Mỹ Tây",
+  "village":"", "detail":"Điểm giao hàng",
+  "latitude":10.7951, "longitude":106.7218
+ },
+ "service_id":1, "weight":1.51,
+ "has_cod":true, "cod_amount":250000,
+ "has_insurance":true, "has_packaging":true
+}
+```
+
+Response gồm quote_id, expires_at (10 phút), rate, route_type, distance_meters, source=osrm, route_geometry (GeoJSON LineString), route_data_version nếu có, các phí và total_amount. Không có đường đi thì trả lỗi, không dùng khoảng cách đường chim bay.
+
+POST /orders:
+
+```json
+{
+ "quote_id":"UUID báo giá",
+ "parcel_photo_id":"UUID ảnh vừa tải",
+ "package_name":"Mô tả hàng hóa",
+ "note":"Gọi trước khi giao"
+}
+```
+
+Chỉ nhận đúng các trường này; giá/cân nặng/địa chỉ lấy từ snapshot báo giá. Gửi lại quote đã tạo trả đơn cũ (200); lần đầu 201. Báo giá hết hạn trả 409.
+
+Upload: `Content-Type: multipart/form-data`, một trường file **image**, tối đa **15 MiB = 15 × 1024 × 1024 byte**, ảnh tối đa 40 triệu pixel. Server kiểm tra nội dung, chuẩn hóa JPEG, bỏ metadata. Không phục vụ thư mục ảnh công khai.
+
+## Trạng thái và đánh giá
+
+```text
+pending -- POST accept --> accepted
+accepted -> awaiting_pickup -> picked_up -> delivering -> completed | incomplete
+pending | accepted | awaiting_pickup -- chủ đơn --> cancelled
+```
+
+PATCH status dùng `{ "status":"awaiting_pickup", "note":"" }`. Với incomplete bắt buộc `note` ít nhất 3 ký tự và `incident_photo_id` thuộc nhân viên. Cancelled cần lý do. Không bỏ bước hoặc mở lại trạng thái kết thúc.
+
+POST review: `{ "stars":5, "comment":"Giao cẩn thận, đúng hẹn" }`. Chỉ chủ đơn completed có nhân viên; sao từ 1–5, bình luận không trống, tối đa 1.000 ký tự.
+
+## Giới hạn
+
+Danh sách: page ≥1, limit 1–100. Khối lượng 0,01–1.000 kg, tối đa 2 chữ số thập phân; COD 0–100.000.000đ, có chọn thu hộ thì phải >0. Đóng gói 5.000đ/bảo hiểm 9.900đ khi được chọn.
+
+Lỗi: 400 validation, 401 phiên, 403 quyền, 404 ngoài phạm vi, 409 xung đột, 413 quá dung lượng, 422 tọa độ/tuyến không phù hợp, 429 hạn mức, 502/503 dịch vụ bản đồ gián đoạn/bận. Response `{message, errors?}`.
+
+API 300/phút/IP; maps search/reverse 30/phút/IP; upload 20/phút/IP. Backend xếp hàng bản đồ tối đa 8 và tối thiểu 1,1 giây giữa các request tới cùng nhà cung cấp. Dùng một process với endpoint cộng đồng; nhiều process cần bộ giới hạn chung hoặc máy chủ bản đồ riêng.

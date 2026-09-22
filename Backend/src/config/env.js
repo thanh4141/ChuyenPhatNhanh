@@ -8,6 +8,10 @@ export const env = {
   host: process.env.HOST || '0.0.0.0',
   port: Number(process.env.PORT || 3000),
   jwtSecret: process.env.JWT_SECRET || '',
+  osrmUrl: process.env.OSRM_BASE_URL || 'https://routing.openstreetmap.de/routed-car',
+  photonUrl: process.env.PHOTON_BASE_URL || 'https://photon.komoot.io',
+  mapTileUrl: process.env.MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  mapUserAgent: process.env.MAP_USER_AGENT || 'ChuyenPhatNhanh/1.0 (+https://github.com/thanh4141/ChuyenPhatNhanh)',
   origins: (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:8081').split(',').map(s => s.trim()),
   db: {
     host: process.env.DB_HOST || '127.0.0.1',

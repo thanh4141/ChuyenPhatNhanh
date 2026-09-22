@@ -1,0 +1,10 @@
+import {Router} from 'express';
+import {z} from 'zod';
+import {rateLimit} from 'express-rate-limit';
+import {env} from '../../config/env.js';
+import {provinces} from '../../config/provinces.js';
+export const mapsRouter=Router();
+mapsRouter.get('/config',(req,res)=>res.json({provider:'openstreetmap',configured:true,tile_url:env.mapTileUrl,provinces}));
+mapsRouter.use(rateLimit({windowMs:60000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{message:'Bạn chọn/tìm vị trí quá nhanh. Vui lòng thử lại sau.'}}));
+mapsRouter.get('/search',async(req,res)=>{const {q}=z.object({q:z.string().trim().min(3).max(200)}).parse(req.query);res.json({items:await req.app.locals.maps.search(q)});});
+mapsRouter.get('/reverse',async(req,res)=>{const point=z.object({latitude:z.coerce.number().min(-90).max(90),longitude:z.coerce.number().min(-180).max(180)}).parse(req.query);const result=await req.app.locals.maps.reverse(point);res.json({...result,latitude:point.latitude,longitude:point.longitude});});

@@ -1,0 +1,8 @@
+{
+  "source": "https://raw.githubusercontent.com/thanglequoc/vietnamese-provinces-database/62b1abdfe39625289c37a58ef6678e9db3d37f84/mongodb/gis/mongo_data_vn_province_gis.json",
+  "revision": "62b1abdfe39625289c37a58ef6678e9db3d37f84",
+  "license": "MIT",
+  "retrieved_at": "2026-09-22T10:55:57.025Z",
+  "sha256": "bbaf1ea4225c697dcb329933554205307d8e34bdbd29929f163e6ee12fbc7270",
+  "description": "Province-only geometries from Vietnamese Provinces Database. Administrative reference, not road routing data. See upstream GIS source attribution."
+}

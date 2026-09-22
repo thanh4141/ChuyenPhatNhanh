@@ -9,7 +9,9 @@ export function errorHandler(error, req, res, next) {
   if (error instanceof ZodError) {
     return res.status(400).json({ message: 'Thông tin chưa hợp lệ.', errors: error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   }
-  if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email hoặc mã dữ liệu đã tồn tại.' });
+  if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Thông tin đã tồn tại (email, mã hồ sơ hoặc CCCD).' });
+  if(error.code==='LIMIT_FILE_SIZE')return res.status(413).json({message:'Ảnh vượt quá giới hạn 15 MB.'});
+  if(error.name==='MulterError')return res.status(400).json({message:'Chỉ gửi một ảnh trong trường image, tối đa 15 MB.'});
   if (error.type === 'entity.parse.failed') return res.status(400).json({ message: 'JSON không hợp lệ.' });
   if (error.type === 'entity.too.large') return res.status(413).json({ message: 'Dữ liệu gửi lên quá lớn.' });
   if (error.status) return res.status(error.status).json({ message: error.message });

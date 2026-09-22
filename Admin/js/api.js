@@ -21,3 +21,5 @@ export async function allUsers(role, active) {
   while (users.length < total) { const data = await api(`/users?role=${role}&limit=100&page=${page++}${active ? '&active=1' : ''}`); users.push(...data.items); total = data.total; if (!data.items.length) break; }
   return users;
 }
+
+export async function mediaUrl(id){const r=await fetch('/api/media/'+encodeURIComponent(id)+'/content',{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw new Error('Không tải được ảnh đơn hàng.');return URL.createObjectURL(await r.blob());}
