@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { provinces } from '../../config/provinces.js';
 
 export async function migrateWorkflow(connection) {
-  const sql=await readFile(new URL('../workflow.sql',import.meta.url),'utf8');
+  const sql=await readFile(new URL('../legacy/workflow.sql',import.meta.url),'utf8');
   for(const statement of sql.split(';').map(s=>s.trim()).filter(Boolean))await connection.query(statement);
   for(const p of provinces)await connection.execute('INSERT IGNORE INTO provinces(code,name,region) VALUES (?,?,?)',[p.code,p.name,p.region]);
   const [[done]]=await connection.execute("SELECT version FROM schema_migrations WHERE version='002_self_service'");

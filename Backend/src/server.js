@@ -5,6 +5,8 @@ import { env } from './config/env.js';
 try {
   const app = createApp();
   await pool.query('SELECT 1');
+  const [[schema]] = await pool.query("SELECT phien_ban FROM lich_su_nang_cap WHERE phien_ban='007_vi_tri_tram'");
+  if (!schema) throw new Error('CSDL chưa nâng cấp xong. Chạy npm run db:migrate trước khi mở API.');
   const server = app.listen(env.port, env.host, () => console.log(`Chuyển Phát Nhanh • Admin: http://localhost:${env.port} • API: /api`));
   const shutdown = () => server.close(async () => { await pool.end(); process.exit(0); });
   process.on('SIGINT', shutdown);

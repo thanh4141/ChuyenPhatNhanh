@@ -6,9 +6,9 @@ type Auth = { user:User|null; loading:boolean; restoreError:string; retry:()=>Pr
 const Context=createContext<Auth|null>(null);
 export function AuthProvider({children}:{children:React.ReactNode}) {
   const [user,setUser]=useState<User|null>(null);const [loading,setLoading]=useState(true);const [restoreError,setRestoreError]=useState('');
-  const restore=async()=>{setLoading(true);setRestoreError('');try{if(await restoreToken()){const result=await api<{user:User}>('/auth/me');if(result.user.role==='admin'){await saveToken(null);}else setUser(result.user);}}catch(e){if(!(e instanceof ApiError && e.status===401))setRestoreError(e instanceof Error?e.message:'Không khôi phục được phiên đăng nhập.');}finally{setLoading(false);}};
+  const restore=async()=>{setLoading(true);setRestoreError('');try{if(await restoreToken()){const result=await api<{user:User}>('/auth/me');if(['admin','station_manager'].includes(result.user.role)){await saveToken(null);}else setUser(result.user);}}catch(e){if(!(e instanceof ApiError && e.status===401))setRestoreError(e instanceof Error?e.message:'Không khôi phục được phiên đăng nhập.');}finally{setLoading(false);}};
   useEffect(()=>{setUnauthorizedHandler(()=>setUser(null));void restore();return()=>setUnauthorizedHandler(()=>{});},[]);
-  const accept=async(result:{user:User;token:string})=>{if(result.user.role==='admin')throw new Error('Quản trị viên vui lòng đăng nhập trên web Admin.');await saveToken(result.token);setRestoreError('');setUser(result.user);};
+  const accept=async(result:{user:User;token:string})=>{if(['admin','station_manager'].includes(result.user.role))throw new Error('Quản trị viên vui lòng đăng nhập trên web Admin.');await saveToken(result.token);setRestoreError('');setUser(result.user);};
   const login=async(email:string,password:string)=>accept(await api('/auth/login','POST',{email:email.trim(),password}));
   const register=async(input:{name:string;email:string;password:string;phone:string;address:string})=>accept(await api('/auth/register','POST',input));
   const logout=async()=>{try{await api('/auth/logout','POST');}catch(e){if(!(e instanceof ApiError && e.status===401))throw e;}finally{await saveToken(null);setUser(null);setRestoreError('');}};

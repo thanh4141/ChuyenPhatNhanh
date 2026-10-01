@@ -1,3 +1,4 @@
+import { dbColumn } from '../../config/database-names.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool,transaction } from '../../config/database.js';
@@ -11,24 +12,24 @@ const addressSchema=locationSchema.extend({label:text(80).default('Địa chỉ 
 export function formatAddress(address,provinceName){return [address.detail,address.village,address.ward,provinceName].filter(Boolean).join(', ');}
 export const addressesRouter=Router();
 addressesRouter.use(authorize('customer'));
-addressesRouter.get('/',async(req,res)=>{const [items]=await pool.execute('SELECT a.*,p.name AS province_name,p.region FROM addresses a JOIN provinces p ON p.code=a.province_code WHERE a.user_id=? ORDER BY a.is_default DESC,a.id DESC',[req.user.id]);res.json({items});});
+addressesRouter.get('/',async(req,res)=>{const [items]=await pool.execute("SELECT a.*,p.ten AS province_name,p.mien FROM dia_chi a JOIN tinh_thanh p ON p.ma_dinh_danh=a.ma_tinh_thanh WHERE a.ma_tai_khoan=? ORDER BY a.la_mac_dinh DESC,a.ma_so DESC",[req.user.id]);res.json({items});});
 async function save(req,res){
   const address=req.input;const verified=await verifyLocation(req.app.locals.maps,address);const addressId=req.params.id?id.parse(req.params.id):null;
   const result=await transaction(async c=>{
-    await c.execute('SELECT id FROM users WHERE id=? FOR UPDATE',[req.user.id]);
-    if(addressId){const [[old]]=await c.execute('SELECT id FROM addresses WHERE id=? AND user_id=? FOR UPDATE',[addressId,req.user.id]);if(!old)throw new AppError(404,'Không tìm thấy địa chỉ.');}
-    const [[{defaults}]]=await c.execute('SELECT COUNT(*) AS defaults FROM addresses WHERE user_id=? AND is_default=TRUE AND id<>?',[req.user.id,addressId||0]);
+    await c.execute("SELECT ma_so FROM tai_khoan WHERE ma_so=? FOR UPDATE",[req.user.id]);
+    if(addressId){const [[old]]=await c.execute("SELECT ma_so FROM dia_chi WHERE ma_so=? AND ma_tai_khoan=? FOR UPDATE",[addressId,req.user.id]);if(!old)throw new AppError(404,'Không tìm thấy địa chỉ.');}
+    const [[{defaults}]]=await c.execute("SELECT COUNT(*) AS defaults FROM dia_chi WHERE ma_tai_khoan=? AND la_mac_dinh=TRUE AND ma_so<>?",[req.user.id,addressId||0]);
     const isDefault=address.is_default||defaults===0;
-    if(isDefault)await c.execute('UPDATE addresses SET is_default=FALSE WHERE user_id=?',[req.user.id]);
+    if(isDefault)await c.execute("UPDATE dia_chi SET la_mac_dinh=FALSE WHERE ma_tai_khoan=?",[req.user.id]);
     const record={...address,is_default:isDefault,formatted_address:formatAddress(address,verified.province.name)};
-    if(addressId){await c.execute(`UPDATE addresses SET ${Object.keys(record).map(k=>`${k}=?`).join(',')} WHERE id=?`,[...Object.values(record),addressId]);return addressId;}
-    const [created]=await c.execute(`INSERT INTO addresses(user_id,${Object.keys(record).join(',')}) VALUES (${Array(Object.keys(record).length+1).fill('?').join(',')})`,[req.user.id,...Object.values(record)]);return created.insertId;
+    if(addressId){await c.execute(`UPDATE dia_chi SET ${Object.keys(record).map(k=>`${dbColumn(k)}=?`).join(',')} WHERE ma_so=?`,[...Object.values(record),addressId]);return addressId;}
+    const [created]=await c.execute(`INSERT INTO dia_chi(ma_tai_khoan,${Object.keys(record).map(dbColumn).join(',')}) VALUES (${Array(Object.keys(record).length+1).fill('?').join(',')})`,[req.user.id,...Object.values(record)]);return created.insertId;
   });
   res.status(addressId?200:201).json({id:result,message:'Đã lưu địa chỉ.'});
 }
 addressesRouter.post('/',validate(addressSchema),save);
 addressesRouter.patch('/:id',validate(addressSchema),save);
 addressesRouter.delete('/:id',async(req,res)=>{
-  await transaction(async c=>{await c.execute('SELECT id FROM users WHERE id=? FOR UPDATE',[req.user.id]);const addressId=id.parse(req.params.id);const [[address]]=await c.execute('SELECT * FROM addresses WHERE id=? AND user_id=?',[addressId,req.user.id]);if(!address)throw new AppError(404,'Không tìm thấy địa chỉ.');await c.execute('DELETE FROM addresses WHERE id=?',[addressId]);if(address.is_default)await c.execute('UPDATE addresses SET is_default=TRUE WHERE user_id=? ORDER BY id LIMIT 1',[req.user.id]);});
+  await transaction(async c=>{await c.execute("SELECT ma_so FROM tai_khoan WHERE ma_so=? FOR UPDATE",[req.user.id]);const addressId=id.parse(req.params.id);const [[address]]=await c.execute("SELECT * FROM dia_chi WHERE ma_so=? AND ma_tai_khoan=?",[addressId,req.user.id]);if(!address)throw new AppError(404,'Không tìm thấy địa chỉ.');await c.execute("DELETE FROM dia_chi WHERE ma_so=?",[addressId]);if(address.is_default)await c.execute("UPDATE dia_chi SET la_mac_dinh=TRUE WHERE ma_tai_khoan=? ORDER BY ma_so LIMIT 1",[req.user.id]);});
   res.json({message:'Đã xóa địa chỉ. Địa chỉ trên đơn cũ vẫn được giữ nguyên.'});
 });

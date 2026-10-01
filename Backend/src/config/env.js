@@ -10,7 +10,7 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || '',
   osrmUrl: process.env.OSRM_BASE_URL || 'https://routing.openstreetmap.de/routed-car',
   photonUrl: process.env.PHOTON_BASE_URL || 'https://photon.komoot.io',
-  mapTileUrl: process.env.MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  mapStyleUrl: process.env.MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty',
   mapUserAgent: process.env.MAP_USER_AGENT || 'ChuyenPhatNhanh/1.0 (+https://github.com/thanh4141/ChuyenPhatNhanh)',
   origins: (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:8081').split(',').map(s => s.trim()),
   db: {

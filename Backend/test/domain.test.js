@@ -35,9 +35,12 @@ test('Admin chỉ xem; sự cố bắt buộc có cả text và ảnh',()=>{
  assert.throws(()=>assertTransition(o,'incomplete',u,'','image-id'),{status:400});
  assert.doesNotThrow(()=>assertTransition(o,'incomplete',u,'Có sự cố','image-id'));
 });
-test('Đơn chờ chưa nhận xem được bởi nhân viên; khi đã nhận chỉ nhân viên phụ trách',()=>{
- const o={customer_id:10,employee_id:null,status:'pending'};
- assert.equal(canAccess(o,{id:2,role:'employee'}),true);
+test('Đơn chờ chỉ xem tại trạm lấy; đơn cũ chưa có trạm không công khai cho nhân viên',()=>{
+ const o={customer_id:10,employee_id:null,status:'pending',pickup_station_distance_meters:123};
+ assert.equal(canAccess(o,{id:2,role:'employee'}),false);
+ assert.equal(canAccess({...o,origin_station_id:1,pickup_employee_id:2},{id:2,role:'employee',station_id:1}),true);
+ assert.equal(canAccess({...o,origin_station_id:1},{id:2,role:'employee',station_id:2}),false);
+ assert.equal(canAccess({...o,origin_station_id:1},{id:2,role:'employee'}),false);
  assert.equal(canAccess({...o,status:'accepted',employee_id:3},{id:2,role:'employee'}),false);
  assert.equal(canAccess(o,{id:11,role:'customer'}),false);
  assert.equal(canAccess(o,{id:10,role:'customer'}),true);

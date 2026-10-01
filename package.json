@@ -16,5 +16,14 @@
     "mobile": "npm --prefix Mobile start",
     "preview:mobile": "node Backend/src/scripts/mobile-preview.js"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "expo": "^57.0.25"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.4",
+    "typescript": "~6.0.3"
+  }
 }

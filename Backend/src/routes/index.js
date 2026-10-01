@@ -1,3 +1,4 @@
+import {complaintsRouter} from '../modules/complaints/complaints.routes.js';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { pool } from '../config/database.js';
@@ -15,22 +16,27 @@ import { notificationsRouter } from '../modules/notifications/notifications.rout
 import { mediaRouter } from '../modules/media/media.routes.js';
 import { mapsRouter } from '../modules/maps/maps.routes.js';
 
+import {stationsRouter} from '../modules/logistics/stations.routes.js';
+import {logisticsRouter} from '../modules/logistics/logistics.routes.js';
 export const apiRouter = Router();
-apiRouter.get('/health', async (req, res) => { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'mysql' }); });
+apiRouter.get('/health', async (req, res) => { await pool.query("SELECT 1"); res.json({ status: 'ok', database: 'mysql' }); });
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/maps',mapsRouter);
 apiRouter.get('/tracking/:code', rateLimit({ windowMs: 60000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Vui lòng thử lại sau một phút.' } }), async (req, res) => {
   if (!/^CPN[A-Z0-9]{10,20}$/.test(req.params.code)) throw new AppError(404, 'Không tìm thấy mã vận đơn.');
-  const [[order]] = await pool.execute('SELECT id,tracking_code,status,created_at,delivered_at FROM orders WHERE tracking_code=?', [req.params.code]);
+  const [[order]] = await pool.execute("SELECT ma_so,ma_van_don,trang_thai,ngay_tao,ngay_giao_xong FROM don_hang WHERE ma_van_don=?", [req.params.code]);
   if (!order) throw new AppError(404, 'Không tìm thấy mã vận đơn.');
-  const [rows] = await pool.execute('SELECT status,created_at FROM order_events WHERE order_id=? ORDER BY id DESC', [order.id]);
+  const [rows] = await pool.execute("SELECT trang_thai,ngay_tao FROM lich_su_don_hang WHERE ma_don_hang=? ORDER BY ma_so DESC", [order.id]);
   const { id, ...safeOrder } = order;
   res.json({ order: safeOrder, events: rows.map(event => ({ ...event, label: statusLabels[event.status] })) });
 });
 apiRouter.use(authenticate);
+apiRouter.use('/stations',stationsRouter);
+apiRouter.use('/logistics',logisticsRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/services', servicesRouter);
 apiRouter.use('/orders', ordersRouter);
+apiRouter.use('/complaints', complaintsRouter);
 apiRouter.use('/dashboard', dashboardRouter);
 apiRouter.use('/addresses',addressesRouter);
 apiRouter.use('/employees',employeesRouter);

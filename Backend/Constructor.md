@@ -1,17 +1,22 @@
 # Cấu trúc Backend
 
-`server.js` kiểm tra cấu hình và MySQL rồi khởi động `app.js`. `app.js` cấu hình middleware, API `/api`, phục vụ thư mục `Admin`, và trả lỗi thống nhất.
+server.js kiểm tra MySQL rồi chạy app.js. Express phục vụ API /api, web Admin và MapLibre /maps.
 
-- `config/env.js`: đọc `.env` theo đường dẫn Backend, không phụ thuộc thư mục chạy lệnh.
-- `config/database.js`: MySQL pool, UTC session, transaction/rollback.
-- `common/auth.js`: xác thực JWT, kiểm tra tài khoản trong DB, phân quyền.
-- `common/validation.js`: quy tắc dữ liệu dùng chung.
-- `modules/*/*.routes.js`: endpoint chia theo nghiệp vụ.
-- `modules/orders/order.domain.js`: công thức cước, quyền trên đơn, quy trình trạng thái; được unit test riêng.
-- `routes/index.js`: ghép module và route tra cứu công khai giới hạn thông tin.
-- `scripts/schema.sql`, `migrate.js`, `seed.js`: CSDL và dữ liệu minh họa.
-- `test`: kiểm thử nghiệp vụ, API/MySQL, và trình duyệt Admin/Mobile.
+- config: env, MySQL pool UTC, 34 tỉnh/nhóm miền; database-names.js ánh xạ cột MySQL tiếng Việt sang khóa API.
+- common: JWT, vai trò, validation, lỗi.
+- auth/users/employees: phiên, tài khoản, hồ sơ nhân viên.
+- addresses: sổ địa chỉ khách, tọa độ, địa chỉ mặc định.
+- services: bảng cước 6 gói, báo giá có thời hạn.
+- orders: tạo từ quote, tự nhận đơn, trạng thái, đánh giá.
+- media: kiểm tra/chuẩn hóa ảnh, quyền xem, gắn sự cố vào event.
+- notifications: thông báo MySQL.
+- maps: OSRM đường bộ, Photon địa danh, ranh giới tỉnh nội bộ, cache MySQL.
+- dashboard: thống kê Admin.
+- scripts/schema.sql: DDL hiện tại bằng tiếng Việt. legacy/ giữ DDL cũ để nâng cấp.
+- migrations/vietnamese.js: đổi tên tại chỗ, lưu định nghĩa khóa ngoại trước khi thay DDL, hỗ trợ tiếp tục khi gián đoạn.
+- scripts/backup.js: sao lưu DDL/dữ liệu ngoài Git.
+- test: domain/maps/API MySQL/UI Chrome.
 
-API dùng Express 5, `mysql2/promise`, Zod, bcrypt, JWT, Helmet, CORS và rate limiting. Các thao tác có thể xung đột khóa bản ghi bằng `SELECT ... FOR UPDATE` trong transaction. Web Admin và app Mobile dùng chung API và CSDL.
+Admin chỉ xem đơn. Các bước nghiệp vụ dùng transaction và khóa dòng. Không tính lương.
 
-Hướng dẫn chạy tại [README gốc](../README.md); endpoint tại [docs/API.md](../docs/API.md).
+[Chạy](../README.md) · [API](../docs/API.md) · [CSDL](../docs/DATABASE.md) · [Bản đồ](../docs/MAPS.md)

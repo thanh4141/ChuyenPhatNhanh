@@ -10,9 +10,12 @@
     "db:seed": "node src/scripts/seed.js",
     "test": "node --test test/domain.test.js test/maps.test.js",
     "test:integration": "node --test --test-concurrency=1 test/integration.test.js",
+    "test:logistics": "node --test --test-concurrency=1 test/logistics.test.js",
+    "test:migration": "node --test --test-concurrency=1 test/database-migration.test.js",
     "test:ui": "node test/ui.test.js",
     "db:backup": "node src/scripts/backup.js",
-    "maps:update-boundaries": "node src/scripts/download-boundaries.js"
+    "maps:update-boundaries": "node src/scripts/download-boundaries.js",
+    "docs:check": "node src/scripts/check-openapi.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -22,13 +25,15 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "leaflet": "^1.9.4",
+    "maplibre-gl": "^6.10.0",
     "multer": "^2.4.0",
     "mysql2": "^3.15.3",
     "sharp": "^0.35.4",
+    "swagger-ui-dist": "^5.33.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^13.1.0",
     "@playwright/test": "^1.56.1",
     "supertest": "^7.1.4"
   },

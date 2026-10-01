@@ -18,7 +18,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Cho phép CPN chọn ảnh hàng hóa và sự cố.",
-          "cameraPermission": "Cho phép CPN chụp ảnh hàng hóa và sự cố.",
+          "cameraPermission": "Cho phép CPN chụp ảnh hàng hóa, sự cố và bằng chứng giao hàng.",
           "microphonePermission": false
         }
       ]

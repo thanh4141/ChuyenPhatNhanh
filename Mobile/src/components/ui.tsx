@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextInputPro
 import { Status } from '../types';
 
 export const colors={green:'#155d4b',mint:'#e8f3ed',ink:'#263d35',muted:'#7c8d85',bg:'#f5f7f6',line:'#e3eae6',red:'#b45b50'};
-export const statusLabels:Record<Status,string>={pending:'Chờ nhận',accepted:'Đã nhận',awaiting_pickup:'Chờ lấy hàng',picked_up:'Đã lấy hàng',delivering:'Đang giao',completed:'Hoàn thành',incomplete:'Chưa hoàn thành',cancelled:'Đã hủy'};
+export const statusLabels:Record<Status,string>={at_origin:'Đã về kho / Chờ trung chuyển',in_transit:'Đang trung chuyển',at_destination:'Đã về trạm giao',ready_delivery:'Đã phân công giao',pending:'Chờ nhận',accepted:'Đã nhận',awaiting_pickup:'Chờ lấy hàng',picked_up:'Đã lấy hàng',delivering:'Đang giao',completed:'Hoàn thành',incomplete:'Chưa hoàn thành',cancelled:'Đã hủy'};
 export const routeLabels={same_province:'Nội tỉnh',same_region:'Nội miền',inter_region:'Liên miền'};
 export const money=(n:number)=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(Number(n||0));
 export const date=(value:string)=>new Date(value).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});

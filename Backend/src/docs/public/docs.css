@@ -1,0 +1,1 @@
+body{margin:0;background:#fafcfb}header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px max(20px,calc((100% - 1460px)/2));background:#155d4b;color:#fff;font:15px system-ui}header a{color:#fff}header strong{font-size:18px}.swagger-ui .info .title{color:#163d32}.swagger-ui .info{margin:30px 0}.swagger-ui .wrapper{padding:0 20px}

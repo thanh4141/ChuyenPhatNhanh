@@ -29,3 +29,15 @@ test('Photon results restrict country and map legacy province names',()=>{
  assert.equal(parsePhotonFeature({properties:{countrycode:'US',state:'Texas'},geometry:{coordinates:[-95,29]}}),null);
  const p=parsePhotonFeature({properties:{countrycode:'VN',state:'Bình Dương',name:'Thủ Dầu Một'},geometry:{coordinates:[106.65,10.98]}});assert.equal(p.province.code,'79');
 });
+
+test('Station matrix measures station-to-pickup road distances; unreachable pairs stay null',async()=>{
+ let requested='';
+ const provider=createOpenMaps({osrmUrl:'https://example.invalid/routed-car',request:async url=>{requested=url;return {code:'Ok',distances:[[12000],[2300],[null]]};}});
+ const stations=[{latitude:21,longitude:105},{latitude:20,longitude:106},{latitude:19,longitude:107}];
+ assert.deepEqual(await provider.stationDistances(stations,{latitude:20.5,longitude:106.5}),[12000,2300,null]);
+ const u=new URL(requested);assert.equal(u.pathname,'/routed-car/table/v1/driving/105,21;106,20;107,19;106.5,20.5');
+ assert.equal(u.searchParams.get('sources'),'0;1;2');assert.equal(u.searchParams.get('destinations'),'3');assert.equal(u.searchParams.get('annotations'),'distance');assert.equal(u.searchParams.has('fallback_speed'),false);
+ for(const data of [{code:'NotImplemented'},{code:'Ok',distances:[[100]]},{code:'Ok',distances:[[NaN],[3],[4]]}]){
+  const bad=createOpenMaps({request:async()=>data});await assert.rejects(()=>bad.stationDistances(stations,stations[0]),{status:502});
+ }
+});
