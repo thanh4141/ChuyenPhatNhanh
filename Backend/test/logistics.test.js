@@ -297,6 +297,27 @@ test('Cancelling a planned batch releases reservations without moving inventory'
  await call('manager_north','post','/logistics/batches/'+b+'/cancel').expect(200);await call('manager_north','post','/logistics/batches').send(body).expect(201);
 });
 
+test('Weight adjustment is strictly restricted to at_origin status and rejected in any other status',async()=>{
+ const o=await create();
+ const weightPhoto=(await call('manager_north','post','/media/weight').attach('image',png,'weight.png').expect(201)).body.id;
+ await call('manager_north','patch','/orders/'+o.id+'/weight').send({weight:2.5,reason:'Cân tại điểm lấy',photo_id:weightPhoto}).expect(409);
+ await pickupAtNorth(o);
+ await call('manager_north','patch','/orders/'+o.id+'/weight').send({weight:2.5,reason:'Cân khi vừa nhận',photo_id:weightPhoto}).expect(409);
+ await call('manager_north','post','/logistics/orders/'+o.id+'/receive-pickup').expect(200);
+ const inStock=(await call('customer','get','/orders/'+o.id).expect(200)).body.order;
+ assert.equal(inStock.status,'at_origin');
+ const updated=(await call('manager_north','patch','/orders/'+o.id+'/weight').send({weight:2.5,reason:'Đo lại kích thước tại kho',photo_id:weightPhoto}).expect(200)).body.order;
+ assert.equal(updated.weight,2.5);
+ const detail=(await call('customer','get','/orders/'+o.id).expect(200)).body.order;
+ assert.equal(detail.pricing_snapshot.weight_adjustment_reason,'Đo lại kích thước tại kho');
+ assert.equal(detail.pricing_snapshot.initial_weight,1);
+ assert.equal(detail.pricing_snapshot.old_weight,1);
+ const b=(await call('manager_north','post','/logistics/batches').send({station_id:stations.north,destination_station_id:stations.south,order_ids:[o.id]}).expect(201)).body.id;
+ await call('manager_north','post','/logistics/batches/'+b+'/dispatch').expect(200);
+ const photo2=(await call('manager_north','post','/media/weight').attach('image',png,'weight2.png').expect(201)).body.id;
+ await call('manager_north','patch','/orders/'+o.id+'/weight').send({weight:3.0,reason:'Cân trên đường',photo_id:photo2}).expect(409);
+});
+
 test('Admin and station managers operate station setup, stock and batch receiving through the web',async()=>{
  const a=await create(),b=await create();await pickupAtNorth(a);await pickupAtNorth(b);
  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});let browser,page;

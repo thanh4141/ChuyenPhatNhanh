@@ -1,10 +1,14 @@
-import {backupDatabase} from '../backup.js';
+import { backupDatabase } from "../backup.js";
 
-export async function migrateDeliveryComplaints(c,database){
-  const [[done]]=await c.query("SELECT 1 FROM lich_su_nang_cap WHERE phien_ban='006_bang_chung_khieu_nai'");
-  if(done)return;
-  await backupDatabase(c,database);
-  await c.query("ALTER TABLE tep_tai_len MODIFY muc_dich ENUM('parcel','incident','delivery') NOT NULL");
+export async function migrateDeliveryComplaints(c, database) {
+  const [[done]] = await c.query(
+    "SELECT 1 FROM lich_su_nang_cap WHERE phien_ban='006_bang_chung_khieu_nai'",
+  );
+  if (done) return;
+  await backupDatabase(c, database);
+  await c.query(
+    "ALTER TABLE tep_tai_len MODIFY muc_dich ENUM('parcel','incident','delivery') NOT NULL",
+  );
   await c.query(`CREATE TABLE IF NOT EXISTS khieu_nai (
     ma_so BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     ma_don_hang BIGINT UNSIGNED NOT NULL,
@@ -24,5 +28,7 @@ export async function migrateDeliveryComplaints(c,database){
     CONSTRAINT fk_khieu_nai_khach FOREIGN KEY(ma_khach_hang) REFERENCES tai_khoan(ma_so),
     CONSTRAINT fk_khieu_nai_nguoi_xu_ly FOREIGN KEY(ma_nguoi_xu_ly) REFERENCES tai_khoan(ma_so)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
-  await c.query("INSERT INTO lich_su_nang_cap(phien_ban) VALUES ('006_bang_chung_khieu_nai')");
+  await c.query(
+    "INSERT INTO lich_su_nang_cap(phien_ban) VALUES ('006_bang_chung_khieu_nai')",
+  );
 }

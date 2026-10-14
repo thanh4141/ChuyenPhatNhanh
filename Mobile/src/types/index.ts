@@ -102,9 +102,16 @@ export interface Quote extends Fees {
   route_type: Route;
   rate: Service;
   cod_amount: number;
+  weight_adjusted_at?: string;
+  initial_weight?: number;
+  old_weight?: number;
+  weight_adjustment_reason?: string;
+  weight_photo_id?: string;
 }
 export interface Order {
-  delivery_route_available?:boolean;
+  hang_de_vo?: number | boolean;
+  is_fragile?: boolean;
+  delivery_route_available?: boolean;
   pickup_station_distance_meters?: number | null;
   origin_station_id?: number | null;
   destination_station_id?: number | null;
@@ -159,7 +166,7 @@ export interface OrderEvent {
 }
 export interface Media {
   id: string;
-  purpose: "parcel" | "incident" | "delivery";
+  purpose: "parcel" | "incident" | "delivery" | "weight";
   event_id: number | null;
 }
 export interface Review {

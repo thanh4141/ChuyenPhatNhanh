@@ -24,6 +24,13 @@ const filterFields = (f = {}) =>
       ["express", "Hỏa tốc"],
     ],
     f.service_code || "",
+  )}</select></label><label>Hàng dễ vỡ<select name="is_fragile">${options(
+    [
+      ["", "Tất cả"],
+      ["1", "Hàng dễ vỡ ⚠️"],
+      ["0", "Hàng thường"],
+    ],
+    f.is_fragile || "",
   )}</select></label><label>Từ ngày<input type="date" name="date_from" value="${esc(f.date_from || "")}"></label><label>Đến ngày<input type="date" name="date_to" value="${esc(f.date_to || "")}"></label>`;
 const batchLabels = {
   planned: "Chờ xuất",
@@ -45,14 +52,12 @@ export async function stationsPage(state) {
   return (
     heading(
       "Trạm chuyển phát",
-      "Mỗi tỉnh/thành một trạm. Quản lý trạm đăng nhập tại trang web này bằng tài khoản riêng.",
+      "Quản lý danh sách trạm chuyển phát, tài khoản trạm và vị trí kho.",
     ) +
     `${missing.length ? '<p class="error-message">Còn ' + missing.length + " trạm chưa có vị trí. Hãy ghim đủ vị trí để hệ thống tính được trạm lấy gần nhất cho đơn mới.</p>" : ""}<section class="panel"><form id="station-form" class="filter-row">${input("name", "Tên trạm")}<label>Tỉnh / Thành phố<select name="province_code" aria-label="Tỉnh / Thành phố" required>${options(
-      config.provinces
-        .filter((p) => !items.some((s) => s.province_code === p.code))
-        .map((p) => [p.code, p.name]),
+      config.provinces.map((p) => [p.code, p.name]),
       "",
-    )}</select></label>${input("address", "Địa chỉ kho")}${stationCoordinateFields()}<button class="button primary">Thêm trạm</button></form></section><section class="panel"><div class="table-scroll"><table><thead><tr><th>Trạm</th><th>Tỉnh/thành</th><th>Địa chỉ / Vị trí</th><th>Tài khoản quản lý</th></tr></thead><tbody>${items.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.province_name)}</td><td>${esc(s.address)}<small>${s.latitude == null ? "Chưa ghim bản đồ" : esc(s.latitude) + ", " + esc(s.longitude)}</small><button class="button small" data-action="station-location" data-id="${s.id}">${s.latitude == null ? "Ghim vị trí" : "Cập nhật vị trí"}</button></td><td><button class="button" data-action="create-manager" data-id="${s.id}">Thêm quản lý trạm</button></td></tr>`).join("")}</tbody></table></div></section><section class="panel"><div class="panel-header"><h3>Tài khoản quản lý trạm</h3></div>${managers.items.map((u) => `<div class="account-row"><span>${esc(u.name)} · ${esc(u.email)} · ${esc(items.find((s) => s.id === u.station_id)?.name)} · ${u.active ? "Đang hoạt động" : "Đã khóa"}</span><button class="button" data-action="edit-user" data-id="${u.id}">Sửa</button></div>`).join("") || empty()}</section>`
+    )}</select></label>${input("address", "Địa chỉ kho")}${stationCoordinateFields()}<button class="button primary">Thêm trạm</button></form></section><section class="panel"><div class="table-scroll"><table><thead><tr><th>Trạm</th><th>Tỉnh/thành</th><th>Địa chỉ / Vị trí</th><th>Tài khoản quản lý</th></tr></thead><tbody>${items.map((s) => `<tr><td><strong>${esc(s.name)}</strong>${s.active ? "" : ' <span class="badge cancelled">Tạm ngưng</span>'}</td><td>${esc(s.province_name)}</td><td>${esc(s.address)}<small>${s.latitude == null ? "Chưa ghim bản đồ" : esc(s.latitude) + ", " + esc(s.longitude)}</small><div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap"><button class="button small" data-action="station-location" data-id="${s.id}">${s.latitude == null ? "Ghim vị trí" : "Cập nhật vị trí"}</button><button class="button small" data-action="edit-station" data-id="${s.id}">Sửa</button><button class="button small danger" data-action="delete-station" data-id="${s.id}">Xóa</button></div></td><td><button class="button" data-action="create-manager" data-id="${s.id}">Thêm quản lý trạm</button></td></tr>`).join("")}</tbody></table></div></section><section class="panel"><div class="panel-header"><h3>Tài khoản quản lý trạm</h3></div>${managers.items.map((u) => `<div class="account-row"><span>${esc(u.name)} · ${esc(u.email)} · ${esc(items.find((s) => s.id === u.station_id)?.name)} · ${u.active ? "Đang hoạt động" : "Đã khóa"}</span><button class="button" data-action="edit-user" data-id="${u.id}">Sửa</button></div>`).join("") || empty()}</section>`
   );
 }
 export async function warehousePage(state) {
@@ -107,7 +112,7 @@ export async function warehousePage(state) {
         ...(state.pickupFilters || {}),
       }),
   );
-  const pickupPanel = `<section class="panel"><div class="panel-header"><div><h3>Phân công lấy hàng: ${tasks.total} đơn chờ</h3><p>Ưu tiên Hỏa tốc, sau đó đơn tạo trước. Chọn các điểm lấy gần nhau để phân công cùng nhân viên. Ngày lọc là ngày tạo đơn.</p></div></div><form id="pickup-filter" class="filter-row"><input name="q" aria-label="Tìm điểm lấy" placeholder="Mã đơn / địa chỉ / người gửi" value="${esc(state.pickupFilters?.q || "")}">${filterFields(state.pickupFilters)}<button class="button">Lọc nhiệm vụ</button></form><div class="filter-row"><button class="button primary" data-action="assign-pickup">Phân công lấy hàng đã chọn</button></div><div class="table-scroll"><table><thead><tr><th>Chọn</th><th>Đơn / Gói</th><th>Điểm lấy</th><th>Ngày tạo</th><th>Phân công</th></tr></thead><tbody>${tasks.items.map((o) => `<tr><td><input type="checkbox" data-pickup="${o.id}" aria-label="Phân công ${esc(o.tracking_code)}"></td><td><button class="code-link" data-action="order-detail" data-id="${o.id}">${esc(o.tracking_code)}</button><small>${esc(o.service_name)}</small></td><td>${esc(o.sender_name)}<small>${esc(o.sender_address)}</small></td><td>${date(o.created_at, true)}</td><td>${o.pickup_employee_name ? esc(o.pickup_employee_name) + " · Chờ xác nhận" : "Chưa phân công"}</td></tr>`).join("")}</tbody></table></div><div class="table-bottom"><span>Trang ${tasks.page}</span><button class="button" data-action="pickup-prev" ${tasks.page <= 1 ? "disabled" : ""}>Nhiệm vụ trước</button><button class="button" data-action="pickup-next" ${tasks.page * 20 >= tasks.total ? "disabled" : ""}>Nhiệm vụ sau</button></div></section>`;
+  const pickupPanel = `<section class="panel"><div class="panel-header"><div><h3>Phân công lấy hàng: ${tasks.total} đơn chờ</h3><p>Ưu tiên Hỏa tốc, sau đó đơn tạo trước. Chọn các điểm lấy gần nhau để phân công cùng nhân viên. Ngày lọc là ngày tạo đơn.</p></div></div><form id="pickup-filter" class="filter-row"><input name="q" aria-label="Tìm điểm lấy" placeholder="Mã đơn / địa chỉ / người gửi" value="${esc(state.pickupFilters?.q || "")}">${filterFields(state.pickupFilters)}<button class="button">Lọc nhiệm vụ</button></form><div class="filter-row"><button class="button" type="button" data-action="toggle-all-pickup">Chọn tất cả</button><button class="button primary" data-action="assign-pickup">Phân công lấy hàng đã chọn</button></div><div class="table-scroll"><table><thead><tr><th><input type="checkbox" data-action="toggle-all-pickup" title="Chọn tất cả"></th><th>Đơn / Gói</th><th>Điểm lấy</th><th>Ngày tạo</th><th>Phân công</th></tr></thead><tbody>${tasks.items.map((o) => `<tr><td><input type="checkbox" data-pickup="${o.id}" aria-label="Phân công ${esc(o.tracking_code)}"></td><td><button class="code-link" data-action="order-detail" data-id="${o.id}">${esc(o.tracking_code)}</button>${o.hang_de_vo ? ' <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b">⚠️ Dễ vỡ</span>' : ""}<small>${esc(o.service_name)}</small></td><td>${esc(o.sender_name)}<small>${esc(o.sender_address)}</small></td><td>${date(o.created_at, true)}</td><td>${o.pickup_employee_name ? esc(o.pickup_employee_name) + " · Chờ xác nhận" : "Chưa phân công"}</td></tr>`).join("")}</tbody></table></div><div class="table-bottom"><span>Trang ${tasks.page}</span><button class="button" data-action="pickup-prev" ${tasks.page <= 1 ? "disabled" : ""}>Nhiệm vụ trước</button><button class="button" data-action="pickup-next" ${tasks.page * 20 >= tasks.total ? "disabled" : ""}>Nhiệm vụ sau</button></div></section>`;
 
   return (
     heading(
@@ -122,8 +127,8 @@ export async function warehousePage(state) {
             stations.map((s) => [s.id, s.name]),
             state.stationId,
           )}</select></label>`
-    }<label>Kho giao cuối<select name="destination_station_id" aria-label="Kho giao cuối">${options([["", "Tất cả"], ...stations.map((s) => [s.id, s.name])], state.destinationFilter || "")}</select></label><input name="q" aria-label="Tìm kiện trong kho" placeholder="Mã vận đơn / người nhận" value="${esc(state.q)}">${filterFields(state.stockFilters)}<button class="button">Lọc kho</button></form><div class="panel-header"><div><h3>Hàng đang có trong kho: ${d.total}</h3><p>Lọc ngày theo ngày nhân viên nhận vận chuyển (giờ Việt Nam). Chỉ tính kiện đã kiểm nhận, chưa xuất trung chuyển hoặc giao. Chọn nhiều kiện để gom chuyến/phân công giao.</p><p>Tổng nhóm toàn kho: ${d.groups.map((g) => `${esc(g.province_name)}: ${g.count} kiện (${g.available} chờ gom chuyến)`).join(" · ")}</p></div></div><div class="filter-row"><button class="button" data-action="create-batch">Gom chuyến đã chọn</button><button class="button primary" data-action="assign-delivery">Phân công giao đã chọn</button></div>${d.items.length ? `<div class="table-scroll"><table><thead><tr><th>Chọn</th><th>Mã đơn</th><th>Người nhận</th><th>Gói / Ngày nhận vận chuyển</th><th>Kho giao cuối</th><th>Trạng thái</th><th>Người giao / Chuyến</th></tr></thead><tbody>${d.items.map((o) => `<tr><td><input type="checkbox" data-stock="${o.id}" aria-label="Chọn ${esc(o.tracking_code)}"></td><td><button class="code-link" data-action="order-detail" data-id="${o.id}">${esc(o.tracking_code)}</button></td><td>${esc(o.receiver_name)}</td><td>${esc(o.service_name)}<small>${o.accepted_at ? date(o.accepted_at, true) : "Chưa nhận"}</small></td><td>${esc(o.destination_station_name)}</td><td>${badge(o.status)}</td><td>${esc(o.delivery_employee_name || "Chưa phân công")}${o.current_batch_id ? " · Chuyến #" + o.current_batch_id : ""}</td></tr>`).join("")}</tbody></table></div>` : empty("Kho chưa có kiện theo bộ lọc")}<div class="table-bottom"><span>Trang ${d.page}</span><div><button class="button" data-action="prev" ${d.page <= 1 ? "disabled" : ""}>Trước</button><button class="button" data-action="next" ${d.page * 50 >= d.total ? "disabled" : ""}>Sau</button></div></div></section>
- <section class="panel"><div class="panel-header"><div><h3>Chờ nhân viên bàn giao: ${d.awaiting.length}</h3><p>Chỉ xác nhận khi đã kiểm nhận kiện thực tế tại kho.</p></div></div>${d.awaiting.map((o) => `<div class="account-row"><span>${esc(o.tracking_code)} · ${esc(o.package_name)}</span><button class="button" data-action="receive-pickup" data-id="${o.id}">Xác nhận hàng về kho</button></div>`).join("") || empty()}</section>
+    }<label>Kho giao cuối<select name="destination_station_id" aria-label="Kho giao cuối">${options([["", "Tất cả"], ...stations.map((s) => [s.id, s.name])], state.destinationFilter || "")}</select></label><input name="q" aria-label="Tìm kiện trong kho" placeholder="Mã vận đơn / người nhận" value="${esc(state.q)}">${filterFields(state.stockFilters)}<button class="button">Lọc kho</button></form><div class="panel-header"><div><h3>Hàng đang có trong kho: ${d.total}</h3><p>Lọc ngày theo ngày nhân viên nhận vận chuyển (giờ Việt Nam). Chỉ tính kiện đã kiểm nhận, chưa xuất trung chuyển hoặc giao. Chọn nhiều kiện để gom chuyến/phân công giao.</p><p>Tổng nhóm toàn kho: ${d.groups.map((g) => `${esc(g.province_name)}: ${g.count} kiện (${g.available} chờ gom chuyến)`).join(" · ")}</p></div></div><div class="filter-row"><button class="button" type="button" data-action="toggle-all-stock">Chọn tất cả</button><button class="button" data-action="create-batch">Gom chuyến đã chọn</button><button class="button primary" data-action="assign-delivery">Phân công giao đã chọn</button></div>${d.items.length ? `<div class="table-scroll"><table><thead><tr><th><input type="checkbox" data-action="toggle-all-stock" title="Chọn tất cả"></th><th>Mã đơn</th><th>Người nhận</th><th>Gói / Ngày nhận vận chuyển</th><th>Kho giao cuối</th><th>Trạng thái</th><th>Người giao / Chuyến</th></tr></thead><tbody>${d.items.map((o) => `<tr><td><input type="checkbox" data-stock="${o.id}" aria-label="Chọn ${esc(o.tracking_code)}"></td><td><button class="code-link" data-action="order-detail" data-id="${o.id}">${esc(o.tracking_code)}</button>${o.hang_de_vo ? ' <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b">⚠️ Dễ vỡ</span>' : ""}</td><td>${esc(o.receiver_name)}</td><td>${esc(o.service_name)}<small>${o.accepted_at ? date(o.accepted_at, true) : "Chưa nhận"}</small></td><td>${esc(o.destination_station_name)}</td><td>${badge(o.status)}</td><td>${esc(o.delivery_employee_name || "Chưa phân công")}${o.current_batch_id ? " · Chuyến #" + o.current_batch_id : ""}</td></tr>`).join("")}</tbody></table></div>` : empty("Kho chưa có kiện theo bộ lọc")}<div class="table-bottom"><span>Trang ${d.page}</span><div><button class="button" data-action="prev" ${d.page <= 1 ? "disabled" : ""}>Trước</button><button class="button" data-action="next" ${d.page * 50 >= d.total ? "disabled" : ""}>Sau</button></div></div></section>
+ <section class="panel"><div class="panel-header"><div><h3>Chờ nhân viên bàn giao: ${d.awaiting.length}</h3><p>Chỉ xác nhận khi đã kiểm nhận kiện thực tế tại kho.</p></div></div>${d.awaiting.map((o) => `<div class="account-row"><span>${esc(o.tracking_code)} · ${esc(o.package_name)}${o.hang_de_vo ? ' <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b">⚠️ Dễ vỡ</span>' : ""}</span><button class="button" data-action="receive-pickup" data-id="${o.id}">Xác nhận hàng về kho</button></div>`).join("") || empty()}</section>
  <section class="panel"><div class="panel-header"><div><h3>Chuyến trung chuyển đi / đến</h3><p>Lọc ngày theo ngày xuất chuyến (giờ Việt Nam). Lọc gói tìm chuyến có chứa gói đó; tổng kiện vẫn là toàn chuyến.</p></div></div><form id="batch-filter" class="filter-row"><label>Hướng chuyến<select name="direction" aria-label="Hướng chuyến">${options(
    [
      ["", "Đi và đến"],
@@ -136,6 +141,49 @@ export async function warehousePage(state) {
   );
 }
 export async function logisticsClick(action, id, state, navigate) {
+  if (action === "toggle-all-pickup") {
+    const list = document.querySelectorAll("[data-pickup]");
+    const all = [...list].every((cb) => cb.checked);
+    list.forEach((cb) => (cb.checked = !all));
+    return true;
+  }
+  if (action === "toggle-all-stock") {
+    const list = document.querySelectorAll("[data-stock]");
+    const all = [...list].every((cb) => cb.checked);
+    list.forEach((cb) => (cb.checked = !all));
+    return true;
+  }
+  if (action === "edit-station") {
+    const s = state.stations.find((item) => item.id === id);
+    if (!s) return true;
+    modal(
+      "Chỉnh sửa trạm chuyển phát",
+      `<form id="edit-station-form" data-id="${s.id}"><div class="form-grid">${input("name", "Tên trạm")}<label>Địa chỉ kho<input name="address" type="text" value="${esc(s.address)}" required></label><label>Trạng thái<select name="active">${options(
+        [
+          ["1", "Đang hoạt động"],
+          ["0", "Tạm ngưng"],
+        ],
+        s.active ? "1" : "0",
+      )}</select></label>${formError("edit-station-form")}</div>${save}</form>`,
+    );
+    const n = document.querySelector('#edit-station-form input[name="name"]');
+    if (n) n.value = s.name;
+    return true;
+  }
+  if (action === "delete-station") {
+    const s = state.stations.find((item) => item.id === id);
+    if (!s) return true;
+    if (
+      !window.confirm(
+        `Bạn có chắc chắn muốn xóa hoặc vô hiệu hóa trạm "${s.name}"?`,
+      )
+    )
+      return true;
+    await api("/stations/" + id, { method: "DELETE" });
+    await navigate();
+    toast("Đã xóa hoặc ngưng hoạt động trạm.");
+    return true;
+  }
   if (action === "pickup-prev" || action === "pickup-next") {
     state.pickupPage =
       (state.pickupPage || 1) + (action === "pickup-next" ? 1 : -1);
@@ -213,7 +261,7 @@ export async function logisticsClick(action, id, state, navigate) {
         batch.destination_station_id === state.user.station_id);
     modal(
       "Kiện trong chuyến " + batch.code,
-      `<form id="receive-batch-form" data-id="${id}">${items.map((o) => `<label class="account-row">${receiving && !o.received_at ? `<input type="checkbox" name="order_id" value="${o.order_id}">` : ""}<span>${esc(o.tracking_code)} · ${esc(o.package_name)}<small>${esc(o.service_name)} · ${o.accepted_at ? date(o.accepted_at, true) : "Chưa nhận vận chuyển"}</small></span><span>${o.received_at ? "Đã nhập kho lúc " + date(o.received_at, true) : "Chưa nhập kho đến"}</span></label>`).join("")}${formError("receive-batch-form")}${receiving ? '<button class="button primary">Xác nhận đã nhận các kiện chọn</button>' : ""}</form>`,
+      `<form id="receive-batch-form" data-id="${id}">${items.map((o) => `<label class="account-row">${receiving && !o.received_at ? `<input type="checkbox" name="order_id" value="${o.order_id}">` : ""}<span>${esc(o.tracking_code)} · ${esc(o.package_name)}${o.hang_de_vo ? ' <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b">⚠️ Dễ vỡ</span>' : ""}<small>${esc(o.service_name)} · ${o.accepted_at ? date(o.accepted_at, true) : "Chưa nhận vận chuyển"}</small></span><span>${o.received_at ? "Đã nhập kho lúc " + date(o.received_at, true) : "Chưa nhập kho đến"}</span></label>`).join("")}${formError("receive-batch-form")}${receiving ? '<button class="button primary">Xác nhận đã nhận các kiện chọn</button>' : ""}</form>`,
     );
     return true;
   }
@@ -263,7 +311,7 @@ export async function logisticsClick(action, id, state, navigate) {
 }
 export async function logisticsSubmit(f, data, state, navigate) {
   if (f.id === "pickup-filter") {
-    state.pickupFilters = data;
+    state.pickupFilters = { ...data, is_fragile: data.is_fragile || "" };
     state.pickupPage = 1;
     await navigate();
     return true;
@@ -292,6 +340,7 @@ export async function logisticsSubmit(f, data, state, navigate) {
     state.stationId = Number(data.station_id || state.user.station_id);
     state.stockFilters = {
       service_code: data.service_code || "",
+      is_fragile: data.is_fragile || "",
       date_from: data.date_from || "",
       date_to: data.date_to || "",
     };
@@ -300,6 +349,20 @@ export async function logisticsSubmit(f, data, state, navigate) {
     state.index = 1;
     state.batchPage = 1;
     await navigate();
+    return true;
+  }
+  if (f.id === "edit-station-form") {
+    await api("/stations/" + f.dataset.id, {
+      method: "PATCH",
+      body: {
+        name: data.name,
+        address: data.address,
+        active: data.active === "1",
+      },
+    });
+    closeModal();
+    await navigate();
+    toast("Đã cập nhật thông tin trạm.");
     return true;
   }
   if (

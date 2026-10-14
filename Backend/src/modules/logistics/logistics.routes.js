@@ -8,7 +8,11 @@ import { authorize } from "../../common/auth.js";
 import { id, pagination, validate } from "../../common/validation.js";
 import { AppError } from "../../common/errors.js";
 import { stationAccess, event, warehouseLog } from "./logistics.service.js";
-import { notify,notifyManagers } from "../notifications/notifications.routes.js";
+import {
+  notify,
+  notifyManagers,
+} from "../notifications/notifications.routes.js";
+import { emitRealtimeEvent } from "../../common/events.js";
 const ids = z
   .array(id)
   .min(1)
@@ -121,6 +125,11 @@ logisticsRouter.get("/inventory", async (req, res) => {
   if (req.query.destination_station_id) {
     where += " AND o.ma_tram_dich=?";
     params.push(id.parse(req.query.destination_station_id));
+  }
+  if (req.query.is_fragile === "1" || req.query.is_fragile === "true") {
+    where += " AND o.hang_de_vo=1";
+  } else if (req.query.is_fragile === "0" || req.query.is_fragile === "false") {
+    where += " AND o.hang_de_vo=0";
   }
   const filters = logisticsFilters.parse(req.query);
   if (filters.service_code) {
@@ -317,12 +326,10 @@ logisticsRouter.post(
       }
       return r.insertId;
     });
-    res
-      .status(201)
-      .json({
-        id: batchId,
-        message: "Đã gom chuyến. Hàng vẫn trong kho cho đến khi xuất chuyến.",
-      });
+    res.status(201).json({
+      id: batchId,
+      message: "Đã gom chuyến. Hàng vẫn trong kho cho đến khi xuất chuyến.",
+    });
   },
 );
 logisticsRouter.post("/batches/:id/dispatch", async (req, res) => {
@@ -370,7 +377,17 @@ logisticsRouter.post("/batches/:id/dispatch", async (req, res) => {
       "UPDATE chuyen_trung_chuyen SET trang_thai='dispatched',ngay_xuat_kho=UTC_TIMESTAMP() WHERE ma_so=?",
       [b.id],
     );
-    await notifyManagers(c,b.destination_station_id,null,'batch_in:'+b.id,'Có chuyến đang đến kho',b.code+': '+items.length+' kiện đã xuất kho. Chuẩn bị kiểm nhận từng kiện khi hàng đến.');
+    await notifyManagers(
+      c,
+      b.destination_station_id,
+      null,
+      "batch_in:" + b.id,
+      "Có chuyến đang đến kho",
+      b.code +
+        ": " +
+        items.length +
+        " kiện đã xuất kho. Chuẩn bị kiểm nhận từng kiện khi hàng đến.",
+    );
   });
   res.json({ message: "Đã xuất chuyến." });
 });

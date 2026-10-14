@@ -1,35 +1,180 @@
-import {nearestPickupStation} from '../logistics/station-routing.js';
-import { dbColumn } from '../../config/database-names.js';
-import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
-import { pool } from '../../config/database.js';
-import { provinceByCode } from '../../config/provinces.js';
-import { authorize } from '../../common/auth.js';
-import { AppError } from '../../common/errors.js';
-import { id,validate } from '../../common/validation.js';
-import { calculateFee,routeType } from '../orders/order.domain.js';
-import { locationSchema,formatAddress } from '../addresses/addresses.routes.js';
-import { verifyLocation } from '../maps/maps.service.js';
-export const servicesRouter=Router();
-export const quoteSchema=z.object({pickup_address_id:id,delivery:locationSchema,service_id:id,weight:z.number().min(0.01).max(1000).refine(v=>Math.abs(v*100-Math.round(v*100))<0.00001,'Khối lượng tối đa 2 chữ số thập phân.'),has_cod:z.boolean(),cod_amount:z.number().int().min(0).max(100000000),has_insurance:z.boolean(),has_packaging:z.boolean()}).strict().refine(v=>v.has_cod?v.cod_amount>0:v.cod_amount===0,'Tiền COD phải lớn hơn 0 khi chọn thu hộ, bằng 0 khi không thu hộ.');
-servicesRouter.get('/',async(req,res)=>{const [items]=await pool.query(`SELECT r.*,s.ten AS service_name,s.ma_dinh_danh AS service_code FROM bang_cuoc r JOIN dich_vu s ON s.ma_so=r.ma_dich_vu ${req.user.role==='admin'?'':'WHERE r.dang_hoat_dong=TRUE AND s.dang_hoat_dong=TRUE'} ORDER BY r.ma_dich_vu,r.ma_so`);res.json({items});});
-servicesRouter.post('/quote',authorize('customer'),validate(quoteSchema),async(req,res)=>{
-  const input=req.input;
-  const [[pickup]]=await pool.execute("SELECT * FROM dia_chi WHERE ma_so=? AND ma_tai_khoan=?",[input.pickup_address_id,req.user.id]);
-  if(!pickup)throw new AppError(404,'Không tìm thấy địa chỉ lấy hàng của bạn.');
-  const [from,to]=await Promise.all([verifyLocation(req.app.locals.maps,pickup),verifyLocation(req.app.locals.maps,input.delivery)]);
-  const type=routeType(from.province,to.province);
-  const [[rate]]=await pool.execute("SELECT r.*,s.ten AS service_name FROM bang_cuoc r JOIN dich_vu s ON s.ma_so=r.ma_dich_vu WHERE r.ma_dich_vu=? AND r.loai_tuyen=? AND r.dang_hoat_dong=TRUE AND s.dang_hoat_dong=TRUE",[input.service_id,type]);
-  if(!rate)throw new AppError(422,'Chưa có gói cước đang hoạt động cho tuyến này.');
-  const stationSelection=await nearestPickupStation(pool,req.app.locals.maps,pickup,input.delivery);
-  const route=await req.app.locals.maps.route(pickup,input.delivery);
-  const fees=calculateFee(rate,input.weight,route.distance_meters,input);
-  const snapshot={...stationSelection,...input,pickup:{...pickup,province_name:provinceByCode(pickup.province_code).name},delivery:{...input.delivery,province_name:to.province.name,formatted_address:formatAddress(input.delivery,to.province.name)},rate,route_type:type,...route,...fees};
-  const quoteId=randomUUID();const expires=new Date(Date.now()+10*60*1000);
-  await pool.execute("INSERT INTO bao_gia_van_chuyen(ma_so,ma_khach_hang,ma_bang_cuoc,du_lieu_chot,ngay_het_han) VALUES (?,?,?,?,?)",[quoteId,req.user.id,rate.id,JSON.stringify(snapshot),expires]);
-  res.json({quote_id:quoteId,expires_at:expires,...snapshot});
+import { nearestPickupStation } from "../logistics/station-routing.js";
+import { dbColumn } from "../../config/database-names.js";
+import { Router } from "express";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { pool } from "../../config/database.js";
+import { provinceByCode } from "../../config/provinces.js";
+import { authorize } from "../../common/auth.js";
+import { AppError } from "../../common/errors.js";
+import { id, validate } from "../../common/validation.js";
+import { calculateFee, routeType } from "../orders/order.domain.js";
+import {
+  locationSchema,
+  formatAddress,
+} from "../addresses/addresses.routes.js";
+import { verifyLocation } from "../maps/maps.service.js";
+export const servicesRouter = Router();
+export const quoteSchema = z
+  .object({
+    pickup_address_id: id,
+    delivery: locationSchema,
+    service_id: id,
+    weight: z
+      .number()
+      .min(0.01)
+      .max(1000)
+      .refine(
+        (v) => Math.abs(v * 100 - Math.round(v * 100)) < 0.00001,
+        "Khối lượng tối đa 2 chữ số thập phân.",
+      ),
+    has_cod: z.boolean(),
+    cod_amount: z.number().int().min(0).max(100000000),
+    has_insurance: z.boolean(),
+    has_packaging: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (v) => (v.has_cod ? v.cod_amount > 0 : v.cod_amount === 0),
+    "Tiền COD phải lớn hơn 0 khi chọn thu hộ, bằng 0 khi không thu hộ.",
+  );
+servicesRouter.get("/", async (req, res) => {
+  const [items] = await pool.query(
+    `SELECT r.*,s.ten AS service_name,s.ma_dinh_danh AS service_code FROM bang_cuoc r JOIN dich_vu s ON s.ma_so=r.ma_dich_vu ${req.user.role === "admin" ? "" : "WHERE r.dang_hoat_dong=TRUE AND s.dang_hoat_dong=TRUE"} ORDER BY r.ma_dich_vu,r.ma_so`,
+  );
+  res.json({ items });
 });
-const fee=z.number().int().min(0).max(10000000);
-const rateSchema=z.object({base_fee:fee,included_km:z.literal(5),extra_km_fee:fee,included_weight:z.number().min(0.01).max(1000),weight_step:z.number().min(0.01).max(1000),extra_weight_fee:fee,cod_fee:fee,insurance_fee:z.literal(9900),packaging_fee:z.literal(5000),min_days:z.number().int().min(0).max(365),max_days:z.number().int().min(0).max(365),active:z.boolean()}).strict().refine(v=>v.max_days>=v.min_days,'Thời gian tối đa phải lớn hơn hoặc bằng tối thiểu.').refine(v=>[v.included_weight,v.weight_step].every(n=>Math.abs(n*100-Math.round(n*100))<0.00001),'Khối lượng tối đa 2 chữ số thập phân.');
-servicesRouter.patch('/:id',authorize('admin'),validate(rateSchema),async(req,res)=>{const fields=Object.keys(req.input);const [result]=await pool.execute(`UPDATE bang_cuoc SET ${fields.map(k=>`${dbColumn(k)}=?`).join(',')} WHERE ma_so=?`,[...Object.values(req.input),id.parse(req.params.id)]);if(!result.affectedRows)throw new AppError(404,'Không tìm thấy gói cước.');res.json({message:'Đã cập nhật gói cước. Báo giá còn hiệu lực và đơn cũ giữ nguyên giá.'});});
+servicesRouter.post(
+  "/quote",
+  authorize("customer"),
+  validate(quoteSchema),
+  async (req, res) => {
+    const input = req.input;
+    const [[pickup]] = await pool.execute(
+      "SELECT * FROM dia_chi WHERE ma_so=? AND ma_tai_khoan=?",
+      [input.pickup_address_id, req.user.id],
+    );
+    if (!pickup)
+      throw new AppError(404, "Không tìm thấy địa chỉ lấy hàng của bạn.");
+    const [from, to] = await Promise.all([
+      verifyLocation(req.app.locals.maps, pickup),
+      verifyLocation(req.app.locals.maps, input.delivery),
+    ]);
+    const type = routeType(from.province, to.province);
+    const [[rate]] = await pool.execute(
+      "SELECT r.*,s.ten AS service_name FROM bang_cuoc r JOIN dich_vu s ON s.ma_so=r.ma_dich_vu WHERE r.ma_dich_vu=? AND r.loai_tuyen=? AND r.dang_hoat_dong=TRUE AND s.dang_hoat_dong=TRUE",
+      [input.service_id, type],
+    );
+    if (!rate)
+      throw new AppError(422, "Chưa có gói cước đang hoạt động cho tuyến này.");
+    const stationSelection = await nearestPickupStation(
+      pool,
+      req.app.locals.maps,
+      pickup,
+      input.delivery,
+    );
+    let waypoints = [pickup, input.delivery];
+    if (
+      stationSelection.origin_station_id &&
+      stationSelection.destination_station_id
+    ) {
+      const [[originSt]] = await pool.execute(
+        "SELECT ma_so,vi_do,kinh_do,ten FROM tram_chuyen_phat WHERE ma_so=?",
+        [stationSelection.origin_station_id],
+      );
+      const [[destSt]] = await pool.execute(
+        "SELECT ma_so,vi_do,kinh_do,ten FROM tram_chuyen_phat WHERE ma_so=?",
+        [stationSelection.destination_station_id],
+      );
+      if (
+        originSt &&
+        destSt &&
+        originSt.latitude != null &&
+        originSt.longitude != null &&
+        destSt.latitude != null &&
+        destSt.longitude != null
+      ) {
+        waypoints = [
+          pickup,
+          { latitude: originSt.latitude, longitude: originSt.longitude },
+          ...(originSt.id !== destSt.id
+            ? [{ latitude: destSt.latitude, longitude: destSt.longitude }]
+            : []),
+          input.delivery,
+        ];
+      }
+    }
+    const route = await req.app.locals.maps.route(...waypoints);
+    const fees = calculateFee(rate, input.weight, route.distance_meters, input);
+    const snapshot = {
+      ...stationSelection,
+      ...input,
+      pickup: {
+        ...pickup,
+        province_name: provinceByCode(pickup.province_code).name,
+      },
+      delivery: {
+        ...input.delivery,
+        province_name: to.province.name,
+        formatted_address: formatAddress(input.delivery, to.province.name),
+      },
+      rate,
+      route_type: type,
+      ...route,
+      ...fees,
+    };
+    const quoteId = randomUUID();
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+    await pool.execute(
+      "INSERT INTO bao_gia_van_chuyen(ma_so,ma_khach_hang,ma_bang_cuoc,du_lieu_chot,ngay_het_han) VALUES (?,?,?,?,?)",
+      [quoteId, req.user.id, rate.id, JSON.stringify(snapshot), expires],
+    );
+    res.json({ quote_id: quoteId, expires_at: expires, ...snapshot });
+  },
+);
+const fee = z.number().int().min(0).max(10000000);
+const rateSchema = z
+  .object({
+    base_fee: fee,
+    included_km: z.literal(5),
+    extra_km_fee: fee,
+    included_weight: z.number().min(0.01).max(1000),
+    weight_step: z.number().min(0.01).max(1000),
+    extra_weight_fee: fee,
+    cod_fee: fee,
+    insurance_fee: z.literal(9900),
+    packaging_fee: z.literal(5000),
+    min_days: z.number().int().min(0).max(365),
+    max_days: z.number().int().min(0).max(365),
+    active: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (v) => v.max_days >= v.min_days,
+    "Thời gian tối đa phải lớn hơn hoặc bằng tối thiểu.",
+  )
+  .refine(
+    (v) =>
+      [v.included_weight, v.weight_step].every(
+        (n) => Math.abs(n * 100 - Math.round(n * 100)) < 0.00001,
+      ),
+    "Khối lượng tối đa 2 chữ số thập phân.",
+  );
+servicesRouter.patch(
+  "/:id",
+  authorize("admin"),
+  validate(rateSchema),
+  async (req, res) => {
+    const fields = Object.keys(req.input);
+    const [result] = await pool.execute(
+      `UPDATE bang_cuoc SET ${fields.map((k) => `${dbColumn(k)}=?`).join(",")} WHERE ma_so=?`,
+      [...Object.values(req.input), id.parse(req.params.id)],
+    );
+    if (!result.affectedRows)
+      throw new AppError(404, "Không tìm thấy gói cước.");
+    res.json({
+      message:
+        "Đã cập nhật gói cước. Báo giá còn hiệu lực và đơn cũ giữ nguyên giá.",
+    });
+  },
+);

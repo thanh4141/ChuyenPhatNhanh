@@ -32,7 +32,7 @@ import RouteButton from "../components/RouteButton";
 import FeeBreakdown from "../components/FeeBreakdown";
 const nextStatuses: Partial<Record<Status, Status[]>> = {
   accepted: ["awaiting_pickup"],
-  awaiting_pickup: ["picked_up"],
+  awaiting_pickup: ["picked_up", "incomplete"],
   picked_up: ["delivering"],
   delivering: ["completed", "incomplete"],
 };
@@ -54,6 +54,10 @@ export default function OrderDetailScreen({
     [photo, setPhoto] = useState(""),
     [uploading, setUploading] = useState(false),
     [stars, setStars] = useState("5"),
+    [complaintPrefill, setComplaintPrefill] = useState<{
+      title: string;
+      message: string;
+    } | null>(null),
     [comment, setComment] = useState("");
   async function load() {
     setLoading(true);
@@ -76,9 +80,12 @@ export default function OrderDetailScreen({
     setError("");
     setSuccess("");
     try {
-      if(kind==='decline'){
-        if(note.trim().length<3)throw new Error('Nhập lý do không thể nhận ít nhất 3 ký tự.');
-        await api('/orders/'+id+'/decline-pickup','POST',{note});onBack();return;
+      if (kind === "decline") {
+        if (note.trim().length < 3)
+          throw new Error("Nhập lý do không thể nhận ít nhất 3 ký tự.");
+        await api("/orders/" + id + "/decline-pickup", "POST", { note });
+        onBack();
+        return;
       }
       if (kind === "accept") await api("/orders/" + id + "/accept", "POST");
       if (kind === "status") {
@@ -145,7 +152,7 @@ export default function OrderDetailScreen({
   const stationSteps: Partial<Record<Status, Status[]>> = {
     picked_up: directLocal ? ["delivering"] : [],
     accepted: ["awaiting_pickup"],
-    awaiting_pickup: ["picked_up"],
+    awaiting_pickup: ["picked_up", "incomplete"],
     ready_delivery: ["delivering"],
     delivering: ["completed", "incomplete"],
   };
@@ -254,9 +261,33 @@ export default function OrderDetailScreen({
           </Card>
           <Card>
             <Text style={styles.subtitle}>{o.package_name}</Text>
+            {!!o.hang_de_vo && (
+              <View
+                style={{
+                  backgroundColor: "#fef3c7",
+                  padding: 8,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: "#f59e0b",
+                  marginVertical: 4,
+                }}
+              >
+                <Text
+                  style={{ color: "#92400e", fontWeight: "700", fontSize: 13 }}
+                >
+                  ⚠️ Hàng dễ vỡ — Cần cẩn trọng khi vận chuyển
+                </Text>
+              </View>
+            )}
             <Text style={styles.muted}>
               {o.service_name} · {o.weight} kg ·{" "}
               {o.route_type ? routeLabels[o.route_type] : "Đơn cũ"}
+            </Text>
+            <Text style={styles.muted}>
+              Người thanh toán:{" "}
+              {o.payer === "receiver"
+                ? "Người nhận thanh toán"
+                : "Người gửi thanh toán"}
             </Text>
             <Text style={styles.muted}>
               {["osrm", "google_routes"].includes(o.distance_source)
@@ -266,7 +297,16 @@ export default function OrderDetailScreen({
             </Text>
             {o.pricing_snapshot ? (
               <>
-                <RouteButton quote={o.pricing_snapshot} deliveryOrderId={employee&&o.delivery_employee_id===user?.id&&o.delivery_route_available?o.id:undefined}/>
+                <RouteButton
+                  quote={o.pricing_snapshot}
+                  deliveryOrderId={
+                    employee &&
+                    o.delivery_employee_id === user?.id &&
+                    o.delivery_route_available
+                      ? o.id
+                      : undefined
+                  }
+                />
                 <FeeBreakdown fees={o.pricing_snapshot} cod={o.cod_amount} />
                 <Text style={styles.muted}>
                   Dự kiến {o.pricing_snapshot.rate.min_days}–
@@ -329,31 +369,101 @@ export default function OrderDetailScreen({
                     ? "Ảnh hàng hóa"
                     : m.purpose === "delivery"
                       ? "Bằng chứng giao hàng"
-                      : "Ảnh sự cố"
+                      : m.purpose === "weight"
+                        ? "Ảnh cân nặng tại trạm"
+                        : "Ảnh sự cố"
                 }
               />
             ))}
           </Card>
-          {employee && o.status === "pending" && !o.employee_id && o.pickup_employee_id===user?.id && (
-            <Card>
-            <Button
-              title="Xác nhận nhiệm vụ"
-              busy={busy}
-              onPress={() => void act("accept")}
-            />
-            <Field label="Lý do không thể nhận nhiệm vụ" value={note} onChangeText={setNote} multiline/>
-            <Button title="Báo không thể nhận" variant="secondary" busy={busy} onPress={()=>void act('decline')}/>
+          {o.pricing_snapshot?.weight_adjusted_at && (
+            <Card
+              style={{ borderColor: "#f59e0b", backgroundColor: "#fffbeb" }}
+            >
+              <Text style={[styles.subtitle, { color: "#b45309" }]}>
+                ⚖️ Trạm đã điều chỉnh cân nặng
+              </Text>
+              <Text style={styles.muted}>
+                Thời gian sửa: {date(o.pricing_snapshot.weight_adjusted_at)}
+              </Text>
+              <Text style={styles.muted}>
+                Khối lượng ban đầu:{" "}
+                {o.pricing_snapshot.initial_weight ??
+                  o.pricing_snapshot.old_weight}{" "}
+                kg → Cân nặng mới:{" "}
+                <Text style={{ fontWeight: "700", color: "#b45309" }}>
+                  {o.weight} kg
+                </Text>
+              </Text>
+              <Text style={styles.muted}>
+                Lý do điều chỉnh: {o.pricing_snapshot.weight_adjustment_reason}
+              </Text>
+              {o.pricing_snapshot.weight_photo_id && (
+                <MediaImage
+                  id={o.pricing_snapshot.weight_photo_id}
+                  label="Ảnh chụp cân nặng thực tế tại trạm"
+                />
+              )}
+              {!employee && (
+                <Button
+                  title="Khiếu nại cân nặng lên Admin"
+                  variant="danger"
+                  onPress={() => {
+                    const prevKg =
+                      o.pricing_snapshot?.initial_weight ??
+                      o.pricing_snapshot?.old_weight ??
+                      "";
+                    setComplaintPrefill({
+                      title: `Khiếu nại cân nặng đơn ${o.tracking_code}`,
+                      message: `Tôi muốn khiếu nại việc trạm chuyển phát điều chỉnh khối lượng từ ${prevKg} kg lên ${o.weight} kg. Lý do trạm báo: ${o.pricing_snapshot?.weight_adjustment_reason}.`,
+                    });
+                  }}
+                />
+              )}
             </Card>
           )}
+          {employee &&
+            o.status === "pending" &&
+            !o.employee_id &&
+            o.pickup_employee_id === user?.id && (
+              <Card>
+                <Button
+                  title="Xác nhận nhiệm vụ"
+                  busy={busy}
+                  onPress={() => void act("accept")}
+                />
+                <Field
+                  label="Lý do không thể nhận nhiệm vụ"
+                  value={note}
+                  onChangeText={setNote}
+                  multiline
+                />
+                <Button
+                  title="Báo không thể nhận"
+                  variant="secondary"
+                  busy={busy}
+                  onPress={() => void act("decline")}
+                />
+              </Card>
+            )}
           {available.length > 0 && (
             <Card>
               <Text style={styles.subtitle}>
-                {employee ? "Cập nhật hành trình" : "Hủy yêu cầu vận chuyển"}
+                {employee
+                  ? o.status === "awaiting_pickup"
+                    ? "Thực hiện lấy hàng tại điểm"
+                    : "Cập nhật hành trình"
+                  : "Hủy yêu cầu vận chuyển"}
               </Text>
               <Chips
                 items={available.map((s) => ({
                   value: s,
-                  label: statusLabels[s],
+                  label:
+                    o.status === "awaiting_pickup" && s === "picked_up"
+                      ? "Đã lấy hàng"
+                      : o.status === "awaiting_pickup" && s === "incomplete"
+                        ? "Hủy lấy hàng"
+                        : statusLabels[s],
                 }))}
                 value={next || ""}
                 onChange={(v) => {
@@ -387,10 +497,25 @@ export default function OrderDetailScreen({
                     />
                   )}
                   <Button
-                    title={"Xác nhận: " + statusLabels[next]}
-                    variant={next === "cancelled" ? "danger" : "primary"}
+                    title={
+                      o.status === "awaiting_pickup" && next === "incomplete"
+                        ? "Xác nhận: Hủy lấy hàng"
+                        : o.status === "awaiting_pickup" && next === "picked_up"
+                          ? "Xác nhận: Đã lấy hàng"
+                          : "Xác nhận: " + statusLabels[next]
+                    }
+                    variant={
+                      ["cancelled", "incomplete"].includes(next)
+                        ? "danger"
+                        : "primary"
+                    }
                     busy={busy}
-                    disabled={uploading || (next === "completed" && !photo)}
+                    disabled={
+                      uploading ||
+                      (next === "completed" && !photo) ||
+                      (next === "incomplete" &&
+                        (!photo || note.trim().length < 3))
+                    }
                     onPress={() => void act("status")}
                   />
                 </>
@@ -431,7 +556,11 @@ export default function OrderDetailScreen({
             </Card>
           ) : null}
           {!employee && (
-            <OrderComplaint orderId={o.id} revision={o.status + success} />
+            <OrderComplaint
+              orderId={o.id}
+              revision={o.status + success}
+              prefill={complaintPrefill}
+            />
           )}
           <Card>
             <Text style={styles.subtitle}>Lịch sử vận chuyển</Text>

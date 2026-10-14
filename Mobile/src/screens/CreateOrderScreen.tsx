@@ -1,29 +1,354 @@
-import React,{useEffect,useState} from 'react';
-import {KeyboardAvoidingView,Platform,ScrollView,Switch,Text,View} from 'react-native';
-import {api} from '../services/api';
-import {Address,LocationDraft,Quote,Service} from '../types';
-import {Button,Card,Chips,ErrorText,Field,errorMessage,routeLabels,styles} from '../components/ui';
-import LocationForm,{emptyLocation,validateLocation} from '../components/LocationForm';
-import PhotoInput from '../components/PhotoInput';
-import RouteButton from '../components/RouteButton';
-import FeeBreakdown from '../components/FeeBreakdown';
-import AddressesScreen from './AddressesScreen';
-export default function CreateOrderScreen({onCreated}:{onCreated:(id:number)=>void}){
- const [addresses,setAddresses]=useState<Address[]>([]),[rates,setRates]=useState<Service[]>([]),[pickup,setPickup]=useState(''),[service,setService]=useState(''),[delivery,setDelivery]=useState<LocationDraft>(emptyLocation),[weight,setWeight]=useState('1'),[description,setDescription]=useState(''),[photo,setPhoto]=useState(''),[note,setNote]=useState(''),[hasCod,setCod]=useState(false),[codAmount,setCodAmount]=useState(''),[insurance,setInsurance]=useState(false),[packaging,setPackaging]=useState(false),[quote,setQuote]=useState<Quote|null>(null),[busy,setBusy]=useState(''),[uploading,setUploading]=useState(false),[error,setError]=useState(''),[addressBook,setAddressBook]=useState(false);
- async function load(){try{const [a,s]=await Promise.all([api<{items:Address[]}>('/addresses'),api<{items:Service[]}>('/services')]);setAddresses(a.items);setRates(s.items);setPickup(p=>a.items.some(x=>String(x.id)===p)?p:String(a.items[0]?.id||''));setService(v=>v||String(s.items[0]?.service_id||''));}catch(e){setError(errorMessage(e));}}
- useEffect(()=>{void load();},[]);
- useEffect(()=>{setQuote(null);},[pickup,service,delivery,weight,hasCod,codAmount,insurance,packaging]);
- async function calculate(){if(busy)return;setBusy('quote');setError('');setQuote(null);try{
- if(!pickup)throw new Error('Hãy thêm và chọn địa chỉ lấy hàng.');if(!service)throw new Error('Chưa có dịch vụ đang hoạt động.');
- const d=validateLocation(delivery),kg=Number(weight.replace(',','.'));if(!Number.isFinite(kg)||kg<=0)throw new Error('Cân nặng phải lớn hơn 0.');
- const q=await api<Quote>('/services/quote','POST',{pickup_address_id:Number(pickup),delivery:d,service_id:Number(service),weight:kg,has_cod:hasCod,cod_amount:hasCod?Number(codAmount):0,has_insurance:insurance,has_packaging:packaging});setQuote(q);
- }catch(e){setError(errorMessage(e));}finally{setBusy('');}}
- async function create(){if(!quote||busy||uploading)return;setBusy('create');setError('');try{
- if(!description.trim())throw new Error('Nhập nội dung mô tả hàng hóa.');if(!photo)throw new Error('Chọn hoặc chụp ảnh hàng hóa trước khi tạo đơn.');
- if(Date.now()>=new Date(quote.expires_at).getTime()){setQuote(null);throw new Error('Báo giá hết hạn. Vui lòng tính lại cước.');}
- const r=await api<{order:{id:number}}>('/orders','POST',{quote_id:quote.quote_id,package_name:description,parcel_photo_id:photo,note});onCreated(r.order.id);
- }catch(e){setError(errorMessage(e));}finally{setBusy('');}}
- if(addressBook)return <AddressesScreen onBack={()=>{setAddressBook(false);setQuote(null);void load();}}/>;
- const services=[...new Map(rates.map(r=>[r.service_id,{value:String(r.service_id),label:r.service_name}])).values()];
- return <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS==='ios'?'padding':undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}><Text style={styles.eyebrow}>BẮT ĐẦU MỘT HÀNH TRÌNH</Text><Text style={styles.title}>Tạo đơn vận chuyển</Text><Text style={styles.muted}>Chọn hai điểm lấy và giao để nhận báo giá theo quãng đường đường bộ.</Text><View pointerEvents={busy?'none':'auto'} style={{gap:16,opacity:busy?.65:1}}><Card><Text style={styles.subtitle}>01 · Hàng hóa</Text><PhotoInput purpose="parcel" value={photo} onChange={setPhoto} onBusy={setUploading}/><Field label="Nội dung mô tả hàng hóa" value={description} onChangeText={setDescription} multiline maxLength={200}/><Field label="Cân nặng (kg)" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" maxLength={8}/></Card><Card><Text style={styles.subtitle}>02 · Điểm lấy hàng</Text>{addresses.length?<Chips value={pickup} onChange={setPickup} items={addresses.map(a=>({value:String(a.id),label:a.label+(a.is_default?' · Mặc định':'')}))}/>:<Text style={styles.muted}>Bạn chưa có địa chỉ lấy hàng.</Text>}{!!pickup&&<Text style={styles.muted}>{addresses.find(a=>String(a.id)===pickup)?.formatted_address}</Text>}<Button title="Thêm / sửa địa chỉ lấy hàng" variant="secondary" onPress={()=>setAddressBook(true)}/></Card><Card><Text style={styles.subtitle}>03 · Điểm giao hàng</Text><LocationForm recipient value={delivery} onChange={setDelivery}/></Card><Card><Text style={styles.subtitle}>04 · Dịch vụ vận chuyển</Text><Chips items={services} value={service} onChange={setService}/>{[['Thu hộ (COD)',hasCod,setCod],['Bảo hiểm hàng hóa · 9.900đ',insurance,setInsurance],['Đóng gói đặc biệt · 5.000đ',packaging,setPackaging]].map(([label,value,change])=><View key={String(label)} style={styles.row}><Text style={[styles.label,{flex:1}]}>{String(label)}</Text><Switch accessibilityLabel={String(label)} value={value as boolean} onValueChange={change as (v:boolean)=>void}/></View>)}{hasCod&&<Field label="Số tiền thu hộ COD (đ)" value={codAmount} onChangeText={setCodAmount} keyboardType="number-pad" maxLength={9}/>}<Field label="Ghi chú cho shipper" value={note} onChangeText={setNote} multiline maxLength={1000}/></Card></View><ErrorText message={error}/><Button title={quote?'Tính lại cước đường bộ':'Tính cước đường bộ'} busy={busy==='quote'} disabled={!!busy||uploading} onPress={()=>void calculate()}/>{quote&&<Card><Text style={styles.subtitle}>Tổng thanh toán</Text><Text style={styles.muted}>{routeLabels[quote.route_type]} · {(quote.distance_meters/1000).toLocaleString('vi-VN')} km · OpenStreetMap / OSRM</Text><Text style={styles.muted}>Dự kiến {quote.rate.min_days}–{quote.rate.max_days} ngày. Báo giá có hiệu lực đến {new Date(quote.expires_at).toLocaleTimeString('vi-VN')}.</Text><RouteButton quote={quote}/><FeeBreakdown fees={quote} cod={quote.cod_amount}/><Button title="Xác nhận tạo đơn" busy={busy==='create'} disabled={!!busy||uploading} onPress={()=>void create()}/></Card>}</ScrollView></KeyboardAvoidingView>;
+import React, { useEffect, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { api } from "../services/api";
+import { Address, LocationDraft, Quote, Service } from "../types";
+import {
+  Button,
+  Card,
+  Chips,
+  ErrorText,
+  Field,
+  colors,
+  errorMessage,
+  routeLabels,
+  styles,
+} from "../components/ui";
+import LocationForm, {
+  emptyLocation,
+  validateLocation,
+} from "../components/LocationForm";
+import PhotoInput from "../components/PhotoInput";
+import RouteButton from "../components/RouteButton";
+import FeeBreakdown from "../components/FeeBreakdown";
+import AddressesScreen from "./AddressesScreen";
+export default function CreateOrderScreen({
+  onCreated,
+}: {
+  onCreated: (id: number) => void;
+}) {
+  const [addresses, setAddresses] = useState<Address[]>([]),
+    [rates, setRates] = useState<Service[]>([]),
+    [pickup, setPickup] = useState(""),
+    [service, setService] = useState(""),
+    [delivery, setDelivery] = useState<LocationDraft>(emptyLocation),
+    [weight, setWeight] = useState("1"),
+    [description, setDescription] = useState(""),
+    [photo, setPhoto] = useState(""),
+    [note, setNote] = useState(""),
+    [isFragile, setIsFragile] = useState(false),
+    [payer, setPayer] = useState<"sender" | "receiver">("sender"),
+    [hasCod, setCod] = useState(false),
+    [codAmount, setCodAmount] = useState(""),
+    [insurance, setInsurance] = useState(false),
+    [packaging, setPackaging] = useState(false),
+    [quote, setQuote] = useState<Quote | null>(null),
+    [busy, setBusy] = useState(""),
+    [uploading, setUploading] = useState(false),
+    [error, setError] = useState(""),
+    [addressBook, setAddressBook] = useState(false);
+  async function load() {
+    try {
+      const [a, s] = await Promise.all([
+        api<{ items: Address[] }>("/addresses"),
+        api<{ items: Service[] }>("/services"),
+      ]);
+      setAddresses(a.items);
+      setRates(s.items);
+      setPickup((p) =>
+        a.items.some((x) => String(x.id) === p)
+          ? p
+          : String(a.items[0]?.id || ""),
+      );
+      setService((v) => v || String(s.items[0]?.service_id || ""));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  useEffect(() => {
+    setQuote(null);
+  }, [
+    pickup,
+    service,
+    delivery,
+    weight,
+    hasCod,
+    codAmount,
+    insurance,
+    packaging,
+  ]);
+  async function calculate() {
+    if (busy) return;
+    setBusy("quote");
+    setError("");
+    setQuote(null);
+    try {
+      if (!pickup) throw new Error("Hãy thêm và chọn địa chỉ lấy hàng.");
+      if (!service) throw new Error("Chưa có dịch vụ đang hoạt động.");
+      const d = validateLocation(delivery),
+        kg = Number(weight.replace(",", "."));
+      if (!Number.isFinite(kg) || kg <= 0)
+        throw new Error("Cân nặng phải lớn hơn 0.");
+      const q = await api<Quote>("/services/quote", "POST", {
+        pickup_address_id: Number(pickup),
+        delivery: d,
+        service_id: Number(service),
+        weight: kg,
+        has_cod: hasCod,
+        cod_amount: hasCod ? Number(codAmount) : 0,
+        has_insurance: insurance,
+        has_packaging: packaging,
+      });
+      setQuote(q);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+  async function create() {
+    if (!quote || busy || uploading) return;
+    setBusy("create");
+    setError("");
+    try {
+      if (!description.trim()) throw new Error("Nhập nội dung mô tả hàng hóa.");
+      if (!photo)
+        throw new Error("Chọn hoặc chụp ảnh hàng hóa trước khi tạo đơn.");
+      if (Date.now() >= new Date(quote.expires_at).getTime()) {
+        setQuote(null);
+        throw new Error("Báo giá hết hạn. Vui lòng tính lại cước.");
+      }
+      const r = await api<{ order: { id: number } }>("/orders", "POST", {
+        quote_id: quote.quote_id,
+        package_name: description,
+        parcel_photo_id: photo,
+        note,
+        is_fragile: isFragile,
+        payer,
+      });
+      onCreated(r.order.id);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+  if (addressBook)
+    return (
+      <AddressesScreen
+        onBack={() => {
+          setAddressBook(false);
+          setQuote(null);
+          void load();
+        }}
+      />
+    );
+  const services = [
+    ...new Map(
+      rates.map((r) => [
+        r.service_id,
+        { value: String(r.service_id), label: r.service_name },
+      ]),
+    ).values(),
+  ];
+  return (
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.eyebrow}>BẮT ĐẦU MỘT HÀNH TRÌNH</Text>
+        <Text style={styles.title}>Tạo đơn vận chuyển</Text>
+        <Text style={styles.muted}>
+          Chọn hai điểm lấy và giao để nhận báo giá theo quãng đường đường bộ.
+        </Text>
+        <View
+          pointerEvents={busy ? "none" : "auto"}
+          style={{ gap: 16, opacity: busy ? 0.65 : 1 }}
+        >
+          <Card>
+            <Text style={styles.subtitle}>01 · Hàng hóa</Text>
+            <PhotoInput
+              purpose="parcel"
+              value={photo}
+              onChange={setPhoto}
+              onBusy={setUploading}
+            />
+            <Field
+              label="Nội dung mô tả hàng hóa"
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              maxLength={200}
+            />
+            <Field
+              label="Cân nặng (kg)"
+              value={weight}
+              onChangeText={setWeight}
+              keyboardType="decimal-pad"
+              maxLength={8}
+            />
+            <Text
+              style={[
+                styles.muted,
+                {
+                  fontSize: 12,
+                  color: colors.green,
+                  marginTop: -8,
+                  marginBottom: 8,
+                },
+              ]}
+            >
+              💡 Nếu mặt hàng có kích thước quá lớn, quý khách hãy ghi số cân
+              ước tính theo công thức: Dài (cm) x Rộng (cm) x Cao (cm) / 5000.
+            </Text>
+            <View style={styles.row}>
+              <Text style={[styles.label, { flex: 1 }]}>⚠️ Hàng dễ vỡ</Text>
+              <Switch
+                accessibilityLabel="Hàng dễ vỡ"
+                value={isFragile}
+                onValueChange={setIsFragile}
+              />
+            </View>
+            <View
+              style={{
+                backgroundColor: "#fef3c7",
+                padding: 10,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: "#f59e0b",
+                marginTop: 6,
+              }}
+            >
+              <Text
+                style={{ color: "#92400e", fontWeight: "600", fontSize: 12 }}
+              >
+                📌 Vui lòng dán mã đơn hoặc ghi mã đơn lên đơn hàng sau khi tạo
+                đơn.
+              </Text>
+            </View>
+          </Card>
+          <Card>
+            <Text style={styles.subtitle}>02 · Điểm lấy hàng</Text>
+            {addresses.length ? (
+              <Chips
+                value={pickup}
+                onChange={setPickup}
+                items={addresses.map((a) => ({
+                  value: String(a.id),
+                  label: a.label + (a.is_default ? " · Mặc định" : ""),
+                }))}
+              />
+            ) : (
+              <Text style={styles.muted}>Bạn chưa có địa chỉ lấy hàng.</Text>
+            )}
+            {!!pickup && (
+              <Text style={styles.muted}>
+                {
+                  addresses.find((a) => String(a.id) === pickup)
+                    ?.formatted_address
+                }
+              </Text>
+            )}
+            <Button
+              title="Thêm / sửa địa chỉ lấy hàng"
+              variant="secondary"
+              onPress={() => setAddressBook(true)}
+            />
+          </Card>
+          <Card>
+            <Text style={styles.subtitle}>03 · Điểm giao hàng</Text>
+            <LocationForm recipient value={delivery} onChange={setDelivery} />
+          </Card>
+          <Card>
+            <Text style={styles.subtitle}>04 · Dịch vụ vận chuyển</Text>
+            <Chips items={services} value={service} onChange={setService} />
+            {[
+              ["Thu hộ (COD)", hasCod, setCod],
+              ["Bảo hiểm hàng hóa · 9.900đ", insurance, setInsurance],
+              ["Đóng gói đặc biệt · 5.000đ", packaging, setPackaging],
+            ].map(([label, value, change]) => (
+              <View key={String(label)} style={styles.row}>
+                <Text style={[styles.label, { flex: 1 }]}>{String(label)}</Text>
+                <Switch
+                  accessibilityLabel={String(label)}
+                  value={value as boolean}
+                  onValueChange={change as (v: boolean) => void}
+                />
+              </View>
+            ))}
+            {hasCod && (
+              <Field
+                label="Số tiền thu hộ COD (đ)"
+                value={codAmount}
+                onChangeText={setCodAmount}
+                keyboardType="number-pad"
+                maxLength={9}
+              />
+            )}
+            <Text style={[styles.label, { marginTop: 6 }]}>
+              Người thanh toán cước
+            </Text>
+            <Chips
+              value={payer}
+              onChange={(v) => setPayer(v as "sender" | "receiver")}
+              items={[
+                { value: "sender", label: "Người gửi thanh toán" },
+                { value: "receiver", label: "Người nhận thanh toán" },
+              ]}
+            />
+            <Field
+              label="Ghi chú cho shipper"
+              value={note}
+              onChangeText={setNote}
+              multiline
+              maxLength={1000}
+            />
+          </Card>
+        </View>
+        <ErrorText message={error} />
+        <Button
+          title={quote ? "Tính lại cước đường bộ" : "Tính cước đường bộ"}
+          busy={busy === "quote"}
+          disabled={!!busy || uploading}
+          onPress={() => void calculate()}
+        />
+        {quote && (
+          <Card>
+            <Text style={styles.subtitle}>Tổng thanh toán</Text>
+            <Text style={styles.muted}>
+              {routeLabels[quote.route_type]} ·{" "}
+              {(quote.distance_meters / 1000).toLocaleString("vi-VN")} km ·
+              OpenStreetMap / OSRM
+            </Text>
+            <Text style={styles.muted}>
+              Dự kiến {quote.rate.min_days}–{quote.rate.max_days} ngày. Báo giá
+              có hiệu lực đến{" "}
+              {new Date(quote.expires_at).toLocaleTimeString("vi-VN")}.
+            </Text>
+            <RouteButton quote={quote} />
+            <FeeBreakdown fees={quote} cod={quote.cod_amount} />
+            <Button
+              title="Xác nhận tạo đơn"
+              busy={busy === "create"}
+              disabled={!!busy || uploading}
+              onPress={() => void create()}
+            />
+          </Card>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }

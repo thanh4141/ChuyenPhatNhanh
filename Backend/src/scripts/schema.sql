@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS `don_hang` (
   `co_thu_ho` tinyint(1) NOT NULL DEFAULT '0',
   `co_bao_hiem` tinyint(1) NOT NULL DEFAULT '0',
   `co_dong_goi` tinyint(1) NOT NULL DEFAULT '0',
+  `hang_de_vo` tinyint(1) NOT NULL DEFAULT '0',
   `phi_thu_ho` decimal(12,0) NOT NULL DEFAULT '0',
   `phi_bao_hiem` decimal(12,0) NOT NULL DEFAULT '0',
   `phi_dong_goi` decimal(12,0) NOT NULL DEFAULT '0',

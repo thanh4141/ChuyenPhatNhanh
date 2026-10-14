@@ -19,9 +19,14 @@ import {
   canReadOrder,
   statusLabels,
   isDirectLocalPickup,
+  calculateFee,
 } from "./order.domain.js";
+import { emitRealtimeEvent } from "../../common/events.js";
 import { attachMedia } from "../media/media.routes.js";
-import { notify,notifyManagers } from "../notifications/notifications.routes.js";
+import {
+  notify,
+  notifyManagers,
+} from "../notifications/notifications.routes.js";
 import {
   nearestPickupStation,
   verifyStationSelection,
@@ -49,7 +54,7 @@ ordersRouter.get("/", async (req, res) => {
     where.push(
       "o.trang_thai='pending' AND o.ma_nhan_vien IS NULL AND o.quang_duong_tram_lay_met IS NOT NULL AND o.ma_tram_gui=? AND o.ma_nv_lay_hang=?",
     );
-    values.push(req.user.station_id || 0,req.user.id);
+    values.push(req.user.station_id || 0, req.user.id);
   } else if (req.user.role === "station_manager") {
     where.push(orderStationScope);
     values.push(...Array(5).fill(req.user.station_id || 0));
@@ -102,6 +107,8 @@ ordersRouter.post(
         package_name: text(200),
         parcel_photo_id: z.uuid(),
         note: optionalNote,
+        is_fragile: z.boolean().optional(),
+        payer: z.enum(["sender", "receiver"]).optional(),
       })
       .strict(),
   ),
@@ -166,6 +173,8 @@ ordersRouter.post(
         distance_meters: q.distance_meters,
         distance_source: q.source,
         note: req.input.note,
+        is_fragile: req.input.is_fragile ? 1 : 0,
+        payer: req.input.payer || "sender",
       };
       const [created] = await c.execute(
         `INSERT INTO don_hang(${Object.keys(record).map(dbColumn).join(",")}) VALUES (${Object.keys(
@@ -215,6 +224,14 @@ ordersRouter.post(
     const [[order]] = await pool.execute(`${select} WHERE o.ma_so=?`, [
       result.id,
     ]);
+    if (!result.reused) {
+      emitRealtimeEvent("ORDER_CREATED", {
+        order_id: result.id,
+        tracking_code: order?.tracking_code,
+        origin_station_id: order?.origin_station_id,
+        is_fragile: !!order?.is_fragile,
+      });
+    }
     res.status(result.reused ? 200 : 201).json({ order });
   },
 );
@@ -237,9 +254,23 @@ ordersRouter.get("/:id", async (req, res) => {
     [order.id],
   );
   // Loading the order must not depend on an external routing service.
-  order.delivery_route_available = !!order.destination_station_id &&
+  order.delivery_route_available =
+    !!order.destination_station_id &&
     ["ready_delivery", "delivering"].includes(order.status) &&
-    events.some(event => event.status === "ready_delivery");
+    events.some((event) => event.status === "ready_delivery");
+  if (order.pricing_snapshot) {
+    const p =
+      typeof order.pricing_snapshot === "string"
+        ? JSON.parse(order.pricing_snapshot)
+        : { ...order.pricing_snapshot };
+    if (
+      p.weight_adjusted_at &&
+      (p.initial_weight == null || p.initial_weight === "")
+    ) {
+      p.initial_weight = p.old_weight ?? p.weight;
+    }
+    order.pricing_snapshot = p;
+  }
   res.json({ order, events, media, review: review || null });
 });
 ordersRouter.get("/:id/delivery-route", async (req, res) => {
@@ -251,7 +282,8 @@ ordersRouter.get("/:id/delivery-route", async (req, res) => {
     throw new AppError(404, "Không tìm thấy đơn hàng.");
   if (
     !order.destination_station_id ||
-    (order.current_station_id !== order.destination_station_id && !order.left_delivery_station) ||
+    (order.current_station_id !== order.destination_station_id &&
+      !order.left_delivery_station) ||
     order.station_latitude == null ||
     order.station_longitude == null
   )
@@ -261,7 +293,9 @@ ordersRouter.get("/:id/delivery-route", async (req, res) => {
       ? JSON.parse(order.delivery_snapshot)
       : order.delivery_snapshot;
   if (
-    !delivery || delivery.latitude == null || delivery.longitude == null ||
+    !delivery ||
+    delivery.latitude == null ||
+    delivery.longitude == null ||
     !Number.isFinite(Number(delivery.latitude)) ||
     !Number.isFinite(Number(delivery.longitude))
   )
@@ -290,7 +324,11 @@ ordersRouter.post("/:id/route-pickup", authorize("admin"), async (req, res) => {
     [orderId],
   );
   if (!original) throw new AppError(404, "Không tìm thấy đơn hàng.");
-  if (original.status !== "pending" || original.employee_id || original.pickup_employee_id)
+  if (
+    original.status !== "pending" ||
+    original.employee_id ||
+    original.pickup_employee_id
+  )
     throw new AppError(409, "Chỉ xác định lại trạm lấy khi đơn còn chờ nhận.");
   const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
   const pickup = parse(original.pickup_snapshot),
@@ -357,16 +395,44 @@ ordersRouter.post("/:id/route-pickup", authorize("admin"), async (req, res) => {
     ...selection,
   });
 });
-ordersRouter.post('/:id/decline-pickup',authorize('employee'),validate(z.object({note:z.string().trim().min(3).max(1000)}).strict()),async(req,res)=>{
- await transaction(async c=>{
-  const [[o]]=await c.execute('SELECT * FROM don_hang WHERE ma_so=? FOR UPDATE',[id.parse(req.params.id)]);
-  if(!o||o.pickup_employee_id!==req.user.id||o.origin_station_id!==req.user.station_id)throw new AppError(404,'Không tìm thấy nhiệm vụ của bạn.');
-  if(o.status!=='pending'||o.employee_id)throw new AppError(409,'Nhiệm vụ đã xác nhận hoặc đơn đã hủy.');
-  await c.execute('UPDATE don_hang SET ma_nv_lay_hang=NULL WHERE ma_so=?',[o.id]);
-  await c.execute("INSERT INTO lich_su_don_hang(ma_don_hang,ma_nguoi_thuc_hien,trang_thai,ghi_chu) VALUES (?,?,'pending',?)",[o.id,req.user.id,'Nhân viên không thể nhận nhiệm vụ: '+req.input.note]);
-  await c.execute("INSERT INTO thong_bao(ma_tai_khoan,ma_don_hang,loai,tieu_de,noi_dung) SELECT ma_so,?,'status','Cần phân công lại lấy hàng',? FROM tai_khoan WHERE dang_hoat_dong=TRUE AND (vai_tro='admin' OR (vai_tro='station_manager' AND ma_tram=?))",[o.id,o.tracking_code+': '+req.input.note,o.origin_station_id]);
- });res.json({message:'Đã báo quản lý để phân công lại.'});
-});
+ordersRouter.post(
+  "/:id/decline-pickup",
+  authorize("employee"),
+  validate(z.object({ note: z.string().trim().min(3).max(1000) }).strict()),
+  async (req, res) => {
+    await transaction(async (c) => {
+      const [[o]] = await c.execute(
+        "SELECT * FROM don_hang WHERE ma_so=? FOR UPDATE",
+        [id.parse(req.params.id)],
+      );
+      if (
+        !o ||
+        o.pickup_employee_id !== req.user.id ||
+        o.origin_station_id !== req.user.station_id
+      )
+        throw new AppError(404, "Không tìm thấy nhiệm vụ của bạn.");
+      if (o.status !== "pending" || o.employee_id)
+        throw new AppError(409, "Nhiệm vụ đã xác nhận hoặc đơn đã hủy.");
+      await c.execute("UPDATE don_hang SET ma_nv_lay_hang=NULL WHERE ma_so=?", [
+        o.id,
+      ]);
+      await c.execute(
+        "INSERT INTO lich_su_don_hang(ma_don_hang,ma_nguoi_thuc_hien,trang_thai,ghi_chu) VALUES (?,?,'pending',?)",
+        [
+          o.id,
+          req.user.id,
+          "Nhân viên không thể nhận nhiệm vụ: " + req.input.note,
+        ],
+      );
+      await c.execute(
+        "INSERT INTO thong_bao(ma_tai_khoan,ma_don_hang,loai,tieu_de,noi_dung) SELECT ma_so,?,'status','Cần phân công lại lấy hàng',? FROM tai_khoan WHERE dang_hoat_dong=TRUE AND (vai_tro='admin' OR (vai_tro='station_manager' AND ma_tram=?))",
+        [o.id, o.tracking_code + ": " + req.input.note, o.origin_station_id],
+      );
+    });
+    emitRealtimeEvent("ORDER_DECLINED", { order_id: id.parse(req.params.id) });
+    res.json({ message: "Đã báo quản lý để phân công lại." });
+  },
+);
 ordersRouter.post("/:id/accept", authorize("employee"), async (req, res) => {
   await transaction(async (c) => {
     const [[employee]] = await c.execute(
@@ -395,7 +461,11 @@ ordersRouter.post("/:id/accept", authorize("employee"), async (req, res) => {
       );
     if (!employee.station_id || order.origin_station_id !== employee.station_id)
       throw new AppError(403, "Chỉ nhân viên trạm lấy hàng được nhận đơn.");
-    if(order.pickup_employee_id!==req.user.id)throw new AppError(403,'Chỉ nhân viên được quản lý phân công mới được xác nhận nhiệm vụ.');
+    if (order.pickup_employee_id !== req.user.id)
+      throw new AppError(
+        403,
+        "Chỉ nhân viên được quản lý phân công mới được xác nhận nhiệm vụ.",
+      );
     if (order.status !== "pending" || order.employee_id)
       throw new AppError(
         409,
@@ -431,6 +501,7 @@ ordersRouter.post("/:id/accept", authorize("employee"), async (req, res) => {
       `Tiếp tục xử lý ${order.tracking_code} trong Đơn đã nhận.`,
     );
   });
+  emitRealtimeEvent("ORDER_ACCEPTED", { order_id: id.parse(req.params.id) });
   res.json({ message: "Đã nhận đơn hàng." });
 });
 ordersRouter.patch(
@@ -529,9 +600,30 @@ ordersRouter.patch(
           : "Cập nhật đơn hàng",
         `${order.tracking_code}: ${statusLabels[req.input.status]}.`,
       );
-      if(['picked_up','incomplete','completed','cancelled'].includes(req.input.status)){
-        const stationId=['picked_up','cancelled'].includes(req.input.status)?order.origin_station_id:order.destination_station_id;
-        if(stationId)await notifyManagers(c,stationId,order.id,'status',req.input.status==='picked_up'?'Nhân viên đã lấy hàng — chờ bàn giao':statusLabels[req.input.status],`${order.tracking_code}: ${statusLabels[req.input.status]}. ${req.input.note||''}`.slice(0,500));
+      if (
+        ["picked_up", "incomplete", "completed", "cancelled"].includes(
+          req.input.status,
+        )
+      ) {
+        const stationId =
+          ["picked_up", "cancelled"].includes(req.input.status) ||
+          order.status === "awaiting_pickup"
+            ? order.origin_station_id
+            : order.destination_station_id;
+        if (stationId)
+          await notifyManagers(
+            c,
+            stationId,
+            order.id,
+            "status",
+            req.input.status === "picked_up"
+              ? "Nhân viên đã lấy hàng — chờ bàn giao"
+              : statusLabels[req.input.status],
+            `${order.tracking_code}: ${statusLabels[req.input.status]}. ${req.input.note || ""}`.slice(
+              0,
+              500,
+            ),
+          );
       }
       if (req.input.status === "cancelled" && order.employee_id)
         await notify(
@@ -543,7 +635,172 @@ ordersRouter.patch(
           `${order.tracking_code}: ${req.input.note}`.slice(0, 500),
         );
     });
+    emitRealtimeEvent("ORDER_STATUS_CHANGED", {
+      order_id: id.parse(req.params.id),
+      status: req.input.status,
+    });
     res.json({ message: "Đã cập nhật trạng thái." });
+  },
+);
+ordersRouter.patch(
+  "/:id/weight",
+  authorize("station_manager", "admin"),
+  validate(
+    z
+      .object({
+        weight: z
+          .number()
+          .min(0.01)
+          .max(1000)
+          .refine(
+            (v) => Math.abs(v * 100 - Math.round(v * 100)) < 0.00001,
+            "Khối lượng tối đa 2 chữ số thập phân.",
+          ),
+        reason: text(500).min(3),
+        photo_id: z.uuid(),
+      })
+      .strict(),
+  ),
+  async (req, res) => {
+    let updatedOrder;
+    await transaction(async (c) => {
+      const orderId = id.parse(req.params.id);
+      const [[order]] = await c.execute(
+        "SELECT * FROM don_hang WHERE ma_so=? FOR UPDATE",
+        [orderId],
+      );
+      if (!order) throw new AppError(404, "Không tìm thấy đơn hàng.");
+      if (order.status !== "at_origin")
+        throw new AppError(
+          409,
+          "Chỉ có thể chỉnh sửa cân nặng khi đơn hàng ở trạng thái Đã về kho / Chờ trung chuyển.",
+        );
+
+      if (req.user.role === "station_manager") {
+        const canEdit =
+          req.user.station_id &&
+          [
+            order.origin_station_id,
+            order.current_station_id,
+            order.destination_station_id,
+          ].includes(req.user.station_id);
+        if (!canEdit)
+          throw new AppError(
+            403,
+            "Chỉ quản lý trạm liên quan đến đơn hàng mới có quyền chỉnh sửa cân nặng.",
+          );
+      }
+
+      const [[rate]] = await c.execute(
+        "SELECT * FROM bang_cuoc WHERE ma_so=?",
+        [order.rate_id],
+      );
+      if (!rate)
+        throw new AppError(422, "Không tìm thấy bảng cước gốc của đơn hàng.");
+
+      const pricing =
+        typeof order.pricing_snapshot === "string"
+          ? JSON.parse(order.pricing_snapshot)
+          : order.pricing_snapshot || {};
+      const extras = {
+        has_cod: !!order.has_cod,
+        cod_amount: order.cod_amount,
+        has_insurance: !!order.has_insurance,
+        has_packaging: !!order.has_packaging,
+      };
+
+      const newFees = calculateFee(
+        rate,
+        req.input.weight,
+        order.distance_meters,
+        extras,
+      );
+      const oldWeight = order.weight;
+      const newWeight = req.input.weight;
+      const initialWeight =
+        pricing.initial_weight ??
+        pricing.old_weight ??
+        pricing.weight ??
+        oldWeight;
+
+      const updatedPricing = {
+        ...pricing,
+        ...newFees,
+        weight: newWeight,
+        initial_weight: initialWeight,
+        old_weight: oldWeight,
+        weight_adjusted_at: new Date().toISOString(),
+        weight_adjusted_by: req.user.name,
+        weight_adjustment_reason: req.input.reason,
+        weight_photo_id: req.input.photo_id,
+      };
+
+      await c.execute(
+        "UPDATE don_hang SET khoi_luong=?,cuoc_van_chuyen=?,tong_thanh_toan=?,chi_tiet_cuoc=? WHERE ma_so=?",
+        [
+          newWeight,
+          newFees.shipping_fee,
+          newFees.total_amount,
+          JSON.stringify(updatedPricing),
+          order.id,
+        ],
+      );
+
+      const [event] = await c.execute(
+        "INSERT INTO lich_su_don_hang(ma_don_hang,ma_nguoi_thuc_hien,trang_thai,ghi_chu) VALUES (?,?,?,?)",
+        [
+          order.id,
+          req.user.id,
+          order.status,
+          `Quản lý trạm ${req.user.name} đã điều chỉnh cân nặng từ ${oldWeight}kg sang ${newWeight}kg. Lý do: ${req.input.reason}`,
+        ],
+      );
+
+      await attachMedia(
+        c,
+        req.input.photo_id,
+        req.user.id,
+        ["weight", "parcel"],
+        order.id,
+        event.insertId,
+      );
+
+      const nowFormatted = new Date().toLocaleString("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      });
+      const notifContent = `Vào lúc ${nowFormatted}, khối lượng đơn ${order.tracking_code} đã được điều chỉnh từ ${oldWeight}kg thành ${newWeight}kg (Cước mới: ${newFees.total_amount.toLocaleString("vi-VN")}đ). Lý do: ${req.input.reason}`;
+      await notify(
+        c,
+        order.customer_id,
+        order.id,
+        "weight_adjusted",
+        `Điều chỉnh cân nặng đơn #${order.tracking_code}`,
+        notifContent,
+      );
+
+      emitRealtimeEvent("ORDER_WEIGHT_UPDATED", {
+        order_id: order.id,
+        customer_id: order.customer_id,
+        tracking_code: order.tracking_code,
+        initial_weight: initialWeight,
+        old_weight: oldWeight,
+        new_weight: newWeight,
+        reason: req.input.reason,
+        photo_id: req.input.photo_id,
+      });
+
+      updatedOrder = {
+        id: order.id,
+        weight: newWeight,
+        shipping_fee: newFees.shipping_fee,
+        total_amount: newFees.total_amount,
+      };
+    });
+
+    res.json({
+      message: "Đã cập nhật cân nặng đơn hàng và gửi thông báo tới khách hàng.",
+      order: updatedOrder,
+    });
   },
 );
 ordersRouter.post(
